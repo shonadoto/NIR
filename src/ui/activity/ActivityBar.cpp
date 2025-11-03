@@ -19,11 +19,11 @@ ActivityBar::ActivityBar(QWidget *parent)
 
 ActivityBar::~ActivityBar() = default;
 
-std::shared_ptr<ActivityButton> ActivityBar::addToggleButton(const QIcon &icon, const QString &text, bool checked) {
-    auto btn = std::make_shared<ActivityButton>(this);
+ActivityButton* ActivityBar::addToggleButton(const QIcon &icon, const QString &text, bool checked) {
+    auto *btn = new ActivityButton(this);
     btn->setToolTip(text);
     btn->configure(icon, QSize(kDefaultIconSizePx, kDefaultIconSizePx), true, checked);
-    layout_->addWidget(btn.get(), 0, Qt::AlignTop);
+    layout_->addWidget(btn, 0, Qt::AlignTop);
 
     const int w = btn->sizeHint().width() + 2 * margin_;
     if (w > fixed_width_) {
