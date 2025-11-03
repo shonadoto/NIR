@@ -2,6 +2,7 @@
 build/
 build-*/
 cmake-build-*/
+.cache/
 
 # CMake files
 CMakeFiles/
@@ -22,5 +23,3 @@ compile_commands.json
 *.swo
 *.bak
 *.tmp
-
-

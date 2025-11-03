@@ -2,13 +2,21 @@ set(SOURCES
     app/main.cpp
     ui/MainWindow.cpp
     ui/EditorView.cpp
-    ui/PanelArea.cpp
+    ui/activity/ActivityBar.cpp
+    ui/activity/ActivityButton.cpp
+    ui/panels/ObjectsBar.cpp
+    ui/editor/EditorArea.cpp
+    ui/sidebar/SideBarWidget.cpp
     )
 
 set(HEADERS
     ui/MainWindow.h
     ui/EditorView.h
-    ui/PanelArea.h
+    ui/activity/ActivityBar.h
+    ui/activity/ActivityButton.h
+    ui/panels/ObjectsBar.h
+    ui/editor/EditorArea.h
+    ui/sidebar/SideBarWidget.h
     )
 
 add_executable(NIRMaterialEditor
