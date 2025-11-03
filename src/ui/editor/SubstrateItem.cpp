@@ -8,7 +8,7 @@ constexpr qreal kOutlineWidthPx = 1.0;
 
 SubstrateItem::SubstrateItem(const QSizeF &size)
     : size_(size) {
-    setFlag(QGraphicsItem::ItemIsSelectable, false);
+    setFlag(QGraphicsItem::ItemIsSelectable, true);
     setFlag(QGraphicsItem::ItemIsMovable, false);
     setZValue(-100.0); // stay behind other shapes later
 }

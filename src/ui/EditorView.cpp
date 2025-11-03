@@ -5,13 +5,17 @@
 #include <QMouseEvent>
 #include <QPainter>
 #include <QScrollBar>
+#include <QtGlobal>
 #include <QtMath>
 #include <algorithm>
+#include <qnamespace.h>
 
 namespace {
-constexpr qreal kZoomStep = 1.15;  // per mouse wheel notch (symmetrical)
-constexpr qreal kMinScale = 0.70;  // 70%
-constexpr qreal kMaxScale = 100.0; // 10000%
+constexpr qreal kZoomStep = 1.15;   // per mouse wheel notch (symmetrical)
+constexpr qreal kMinScale = 0.70;   // 70%
+constexpr qreal kMaxScale = 100.0;  // 10000%
+constexpr qreal kRotateStepDeg = 5; // rotation step per notch when Ctrl held
+constexpr qreal kScaleStep = 1.05;  // item scale step per notch when Alt held
 } // namespace
 
 EditorView::EditorView(QWidget *parent)
@@ -50,19 +54,75 @@ void EditorView::wheelEvent(QWheelEvent *event) {
   }
 
   const int num_steps = num_degrees.y() / 15; // 15 deg per notch
+  const auto mods = event->modifiers();
+
+#ifdef Q_OS_MAC
+  const bool rotateMod = mods.testFlag(Qt::ControlModifier); // Ctrl on macOS
+  const bool scaleMod = mods.testFlag(Qt::ShiftModifier);      // Option on macOS
+#else
+  const bool rotateMod = mods & Qt::ControlModifier; // Ctrl
+  const bool scaleMod = mods & Qt::ShiftModifier;              // Alt
+#endif
+
+  // Transform selected items with modifiers (scale first to avoid conflict on
+  // macOS)
+  if (scaleMod) {
+    const qreal step = (num_steps > 0) ? std::pow(kScaleStep, num_steps)
+                                       : std::pow(1.0 / kScaleStep, -num_steps);
+    QList<QGraphicsItem *> targets = scene()->selectedItems();
+    if (targets.isEmpty()) {
+      if (auto *hit = itemAt(event->position().toPoint())) {
+        targets << hit;
+      }
+    }
+    for (QGraphicsItem *it : targets) {
+      it->setTransformOriginPoint(it->boundingRect().center());
+      const qreal newScale = std::clamp(it->scale() * step, 0.1, 10.0);
+      it->setScale(newScale);
+    }
+    event->accept();
+    return;
+  }
+
+  if (rotateMod) {
+    const qreal delta = (num_steps > 0 ? kRotateStepDeg : -kRotateStepDeg) *
+                        std::abs(num_steps);
+    QList<QGraphicsItem *> targets = scene()->selectedItems();
+    if (targets.isEmpty()) {
+      if (auto *hit = itemAt(event->position().toPoint())) {
+        targets << hit;
+      }
+    }
+    for (QGraphicsItem *it : targets) {
+      it->setRotation(it->rotation() + delta);
+    }
+    event->accept();
+    return;
+  }
+
   qreal factor = (num_steps > 0) ? std::pow(kZoomStep, num_steps)
                                  : std::pow(1.0 / kZoomStep, -num_steps);
   applyZoom(factor);
 }
 
 void EditorView::mousePressEvent(QMouseEvent *event) {
-  if (event->button() == Qt::MiddleButton ||
-      event->button() == Qt::LeftButton) {
+  if (event->button() == Qt::MiddleButton) {
     panning_ = true;
     last_mouse_pos_ = event->pos();
     setCursor(Qt::ClosedHandCursor);
     event->accept();
     return;
+  }
+  if (event->button() == Qt::LeftButton) {
+    // Start panning only if click on empty space; otherwise let items handle
+    // drag
+    if (itemAt(event->pos()) == nullptr) {
+      panning_ = true;
+      last_mouse_pos_ = event->pos();
+      setCursor(Qt::ClosedHandCursor);
+      event->accept();
+      return;
+    }
   }
   QGraphicsView::mousePressEvent(event);
 }
@@ -80,9 +140,8 @@ void EditorView::mouseMoveEvent(QMouseEvent *event) {
 }
 
 void EditorView::mouseReleaseEvent(QMouseEvent *event) {
-  if (panning_ &&
-      (event->button() == Qt::MiddleButton ||
-       event->button() == Qt::LeftButton)) {
+  if (panning_ && (event->button() == Qt::MiddleButton ||
+                   event->button() == Qt::LeftButton)) {
     panning_ = false;
     setCursor(Qt::ArrowCursor);
     event->accept();

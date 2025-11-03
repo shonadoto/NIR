@@ -2,6 +2,8 @@
 
 #include <QTreeView>
 #include <QVBoxLayout>
+#include <QEvent>
+#include <QKeyEvent>
 
 namespace {
 constexpr int kMinObjectsBarWidthPx = 220;
@@ -16,6 +18,8 @@ ObjectsBar::ObjectsBar(QWidget *parent)
 
     tree_view_ = new QTreeView(this);
     layout->addWidget(tree_view_);
+    tree_view_->setHeaderHidden(true);
+    tree_view_->setEditTriggers(QAbstractItemView::EditKeyPressed | QAbstractItemView::SelectedClicked | QAbstractItemView::DoubleClicked);
 
     preferred_width_ = kDefaultObjectsBarWidthPx;
     last_visible_width_ = 0;
@@ -39,6 +43,28 @@ void ObjectsBar::showEvent(QShowEvent *event) {
     const int target = last_visible_width_ > 0 ? last_visible_width_ : preferred_width_;
     setFixedWidth(target);
     QWidget::showEvent(event);
+}
+
+void ObjectsBar::set_model(QAbstractItemModel *model) {
+    tree_view_->setModel(model);
+    tree_view_->installEventFilter(this);
+}
+
+bool ObjectsBar::eventFilter(QObject *obj, QEvent *event) {
+    if (obj == tree_view_) {
+        if (auto *ke = dynamic_cast<QKeyEvent*>(event)) {
+            if (ke->key() == Qt::Key_Delete || ke->key() == Qt::Key_Backspace) {
+                if (auto *m = tree_view_->model()) {
+                    const QModelIndex idx = tree_view_->currentIndex();
+                    if (idx.isValid()) {
+                        m->removeRow(idx.row(), idx.parent());
+                        return true;
+                    }
+                }
+            }
+        }
+    }
+    return QWidget::eventFilter(obj, event);
 }
 
 

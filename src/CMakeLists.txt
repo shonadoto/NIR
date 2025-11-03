@@ -9,6 +9,7 @@ set(SOURCES
     ui/editor/SubstrateItem.cpp
     ui/editor/SubstrateDialog.cpp
     ui/sidebar/SideBarWidget.cpp
+    model/ObjectTreeModel.cpp
     )
 
 set(HEADERS
@@ -21,6 +22,7 @@ set(HEADERS
     ui/editor/SubstrateItem.h
     ui/editor/SubstrateDialog.h
     ui/sidebar/SideBarWidget.h
+    model/ObjectTreeModel.h
     )
 
 add_executable(NIRMaterialEditor
