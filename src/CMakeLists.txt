@@ -6,6 +6,7 @@ set(SOURCES
     ui/activity/ActivityButton.cpp
     ui/panels/ObjectsBar.cpp
     ui/editor/EditorArea.cpp
+    ui/editor/SubstrateItem.cpp
     ui/sidebar/SideBarWidget.cpp
     )
 
@@ -16,6 +17,7 @@ set(HEADERS
     ui/activity/ActivityButton.h
     ui/panels/ObjectsBar.h
     ui/editor/EditorArea.h
+    ui/editor/SubstrateItem.h
     ui/sidebar/SideBarWidget.h
     )
 

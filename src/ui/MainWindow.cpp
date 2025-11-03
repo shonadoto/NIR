@@ -31,6 +31,14 @@ void MainWindow::createActionsAndToolbar() {
   toolbar->setMovable(true);
   toolbar->setFloatable(false);
   toolbar->setContextMenuPolicy(Qt::PreventContextMenu);
+
+  auto *fitAction = new QAction("Fit to View", this);
+  connect(fitAction, &QAction::triggered, this, [this]{
+    if (editor_area_) {
+      editor_area_->fit_to_substrate();
+    }
+  });
+  toolbar->addAction(fitAction);
 }
 
 void MainWindow::createActivityObjectsBarAndEditor() {
