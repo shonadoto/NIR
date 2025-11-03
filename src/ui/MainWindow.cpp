@@ -1,6 +1,7 @@
 #include "MainWindow.h"
 
 #include <QAction>
+#include <QFrame>
 #include <QHBoxLayout>
 #include <QIcon>
 #include <QSize>
@@ -9,8 +10,6 @@
 #include <QToolButton>
 #include <QTreeView>
 #include <QVBoxLayout>
-#include <QHBoxLayout>
-#include <QFrame>
 
 #include "EditorView.h"
 #include "PanelArea.h"
@@ -61,9 +60,11 @@ void MainWindow::createActivityObjectsBarAndEditor() {
   objectsButton_->setFixedSize(32, 32);
   objectsButton_->setAutoRaise(true);
   barLayout->addWidget(objectsButton_, 0, Qt::AlignTop);
-  connect(objectsButton_, &QToolButton::toggled, this, &MainWindow::showObjectsBar);
+  connect(objectsButton_, &QToolButton::toggled, this,
+          &MainWindow::showObjectsBar);
 
-  activityBarFixedWidth_ = objectsButton_->sizeHint().width() + 2 * barMargin; // 32 + 2*m
+  activityBarFixedWidth_ =
+      objectsButton_->sizeHint().width() + 2 * barMargin; // 32 + 2*m
   activityBar_->setFixedWidth(activityBarFixedWidth_);
 
   panelArea_ = new PanelArea(root);
@@ -87,8 +88,10 @@ void MainWindow::createActivityObjectsBarAndEditor() {
   panelArea_->setColumnStretch(1, 1);
   panelArea_->setRowStretch(0, 1);
 
-  // place objects panel into grid column 0 (optional: could be in leftContainer_ only)
-  panelArea_->addPanel(new QWidget(panelArea_), 1, 1); // placeholder for future expansion
+  // place objects panel into grid column 0 (optional: could be in
+  // leftContainer_ only)
+  panelArea_->addPanel(new QWidget(panelArea_), 1,
+                       1); // placeholder for future expansion
 
   // Put panel area to the right of activity bar + objects panel container
   rootLayout->addWidget(panelArea_, 1);
@@ -107,7 +110,8 @@ void MainWindow::toggleObjectsBar() {
     objectsBarVisible_ = true;
     if (objectsPanel_) {
       objectsPanel_->setVisible(true);
-      objectsPanel_->setFixedWidth(lastObjectsBarWidth_ > 0 ? lastObjectsBarWidth_ : 280);
+      objectsPanel_->setFixedWidth(
+          lastObjectsBarWidth_ > 0 ? lastObjectsBarWidth_ : 280);
     }
   }
 }
