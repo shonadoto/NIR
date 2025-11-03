@@ -1,7 +1,6 @@
 #pragma once
 
 #include <QGraphicsView>
-#include <memory>
 
 class QGraphicsScene;
 class QGraphicsItem;
@@ -23,7 +22,7 @@ private:
   void applyZoom(qreal factor);
 
 private:
-  std::unique_ptr<QGraphicsScene> scene_;
+  QGraphicsScene *scene_ {nullptr};
   bool panning_ {false};
   QPoint last_mouse_pos_;
   qreal scale_ {1.0};

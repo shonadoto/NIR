@@ -7,6 +7,7 @@ set(SOURCES
     ui/panels/ObjectsBar.cpp
     ui/editor/EditorArea.cpp
     ui/editor/SubstrateItem.cpp
+    ui/editor/SubstrateDialog.cpp
     ui/sidebar/SideBarWidget.cpp
     )
 
@@ -18,6 +19,7 @@ set(HEADERS
     ui/panels/ObjectsBar.h
     ui/editor/EditorArea.h
     ui/editor/SubstrateItem.h
+    ui/editor/SubstrateDialog.h
     ui/sidebar/SideBarWidget.h
     )
 

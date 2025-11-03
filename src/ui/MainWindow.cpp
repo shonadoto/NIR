@@ -8,7 +8,7 @@
 #include "ui/editor/EditorArea.h"
 #include "ui/panels/ObjectsBar.h"
 #include "ui/sidebar/SideBarWidget.h"
-#include <memory>
+#include "ui/editor/SubstrateDialog.h"
 
 namespace {
 constexpr int kDefaultObjectsBarWidthPx = 280;
@@ -39,6 +39,17 @@ void MainWindow::createActionsAndToolbar() {
     }
   });
   toolbar->addAction(fitAction);
+
+  auto *substrateSizeAction = new QAction("Substrate Size...", this);
+  connect(substrateSizeAction, &QAction::triggered, this, [this]{
+    if (!editor_area_) { return; }
+    const QSizeF cur = editor_area_->substrate_size();
+    SubstrateDialog dlg(this, cur.width(), cur.height());
+    if (dlg.exec() == QDialog::Accepted) {
+      editor_area_->set_substrate_size(QSizeF(dlg.width_px(), dlg.height_px()));
+    }
+  });
+  toolbar->addAction(substrateSizeAction);
 }
 
 void MainWindow::createActivityObjectsBarAndEditor() {
@@ -51,7 +62,7 @@ void MainWindow::createActivityObjectsBarAndEditor() {
   // Register default Objects bar
   side_bar_widget_->registerSidebar(
       "objects", QIcon(":/icons/objects.svg"),
-      std::make_shared<ObjectsBar>(side_bar_widget_), kDefaultObjectsBarWidthPx);
+      new ObjectsBar(side_bar_widget_), kDefaultObjectsBarWidthPx);
 
   // Right: Editor area
   editor_area_ = new EditorArea(splitter);

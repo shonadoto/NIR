@@ -2,7 +2,7 @@
 
 #include <QHBoxLayout>
 #include <QStackedWidget>
-#include <format>
+#include <QString>
 
 #include <ui/activity/ActivityBar.h>
 #include <ui/activity/ActivityButton.h>
@@ -25,19 +25,17 @@ SideBarWidget::SideBarWidget(QWidget *parent)
 SideBarWidget::~SideBarWidget() = default;
 
 void SideBarWidget::registerSidebar(const QString &id, const QIcon &icon,
-                                    std::shared_ptr<QWidget> content,
+                                    QWidget *content,
                                     int preferredWidth) {
-  Entry entry{
-      .id = id,
-      .content = content,
-      .stack_index = stack_.addWidget(content.get()),
-      .preferred_width = preferredWidth,
-  };
+  Entry entry;
+  entry.id = id;
+  entry.content = content;
+  entry.stack_index = stack_.addWidget(content);
+  entry.preferred_width = preferredWidth;
 
-  auto btn = activity_bar_.addToggleButton(icon, QString(), false);
-  QObject::connect(
-      btn.get(), &QToolButton::toggled, this,
-      [this, entry_id = entry.id](bool /*on*/) { setActive(entry_id); });
+  auto *btn = activity_bar_.addToggleButton(icon, QString(), false);
+  QObject::connect(btn, &QToolButton::toggled, this,
+                   [this, entry_id = entry.id](bool /*on*/) { setActive(entry_id); });
   entry.button = btn;
   id_to_entry_.insert(id, std::move(entry));
 
@@ -46,8 +44,7 @@ void SideBarWidget::registerSidebar(const QString &id, const QIcon &icon,
 }
 
 void SideBarWidget::registerObjectBar() {
-  registerSidebar("objects", QIcon(":/icons/objects.svg"), std::make_shared<ObjectsBar>(this),
-                  280);
+  registerSidebar("objects", QIcon(":/icons/objects.svg"), new ObjectsBar(this), 280);
 }
 
 void SideBarWidget::setActive(const QString &entry_id) {
@@ -72,8 +69,7 @@ void SideBarWidget::setActive(const QString &entry_id) {
   current_id_ = entry_id;
 
   if (!id_to_entry_.contains(entry_id)) {
-    throw std::runtime_error(std::format("SideBarWidget: Entry not found: {}",
-                                         entry_id.toStdString()));
+    throw std::runtime_error(QString("SideBarWidget: Entry not found: %1").arg(entry_id).toStdString());
   }
 
   auto &e = id_to_entry_[entry_id];
@@ -91,8 +87,7 @@ void SideBarWidget::applyWidth() {
   int stackWidth = 0;
   if (current_id_.has_value()) {
     if (!id_to_entry_.contains(current_id_.value())) {
-      throw std::runtime_error(std::format("SideBarWidget: Entry not found: {}",
-                                           current_id_.value().toStdString()));
+      throw std::runtime_error(QString("SideBarWidget: Entry not found: %1").arg(current_id_.value()).toStdString());
     }
     auto &entry = id_to_entry_[current_id_.value()];
     stackWidth =

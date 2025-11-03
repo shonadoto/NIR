@@ -15,8 +15,8 @@ constexpr qreal kMaxScale = 10.0;       // 1000%
 }
 
 EditorView::EditorView(QWidget *parent)
-    : QGraphicsView(parent), scene_(std::make_unique<QGraphicsScene>(this)) {
-  setScene(scene_.get());
+    : QGraphicsView(parent), scene_(new QGraphicsScene(this)) {
+  setScene(scene_);
   setRenderHint(QPainter::Antialiasing, true);
   setViewportUpdateMode(QGraphicsView::SmartViewportUpdate);
   setDragMode(QGraphicsView::NoDrag);

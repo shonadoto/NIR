@@ -25,8 +25,8 @@ EditorArea::EditorArea(QWidget *parent)
 EditorArea::~EditorArea() = default;
 
 void EditorArea::init_scene() {
-    scene_ = std::make_unique<QGraphicsScene>(this);
-    view_->setScene(scene_.get());
+    scene_ = new QGraphicsScene(this);
+    view_->setScene(scene_);
 
     substrate_ = new SubstrateItem(QSizeF(kDefaultSubstrateWidth, kDefaultSubstrateHeight));
     scene_->addItem(substrate_);
@@ -40,6 +40,22 @@ void EditorArea::fit_to_substrate() {
         return;
     }
     view_->fitToItem(substrate_);
+}
+
+void EditorArea::set_substrate_size(const QSizeF &size) {
+    if (substrate_ == nullptr) {
+        return;
+    }
+    substrate_->set_size(size);
+    scene_->setSceneRect(substrate_->boundingRect());
+    fit_to_substrate();
+}
+
+QSizeF EditorArea::substrate_size() const {
+    if (substrate_ == nullptr) {
+        return QSizeF();
+    }
+    return substrate_->size();
 }
 
 void EditorArea::showEvent(QShowEvent *event) {

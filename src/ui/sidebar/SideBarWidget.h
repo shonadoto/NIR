@@ -6,6 +6,7 @@
 #include <QStackedWidget>
 #include <QWidget>
 #include <optional>
+#include <QPointer>
 class ActivityButton;
 
 class SideBarWidget : public QWidget {
@@ -15,14 +16,14 @@ public:
   ~SideBarWidget() override;
 
   void registerSidebar(const QString &id, const QIcon &icon,
-                       std::shared_ptr<QWidget> content,
+                       QWidget *content,
                        int preferredWidth = 280);
 
 private:
   struct Entry {
     QString id;
-    std::shared_ptr<ActivityButton> button;
-    std::shared_ptr<QWidget> content;
+    QPointer<ActivityButton> button;
+    QPointer<QWidget> content;
     int stack_index{-1};
     int preferred_width{280};
     int last_width{0};

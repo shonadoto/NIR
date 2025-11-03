@@ -1,7 +1,7 @@
 #pragma once
 
 #include <QWidget>
-#include <memory>
+class QVBoxLayout;
 
 class QVBoxLayout;
 class ActivityButton;
@@ -12,12 +12,12 @@ public:
     explicit ActivityBar(QWidget *parent = nullptr);
     ~ActivityBar() override;
 
-    std::shared_ptr<ActivityButton> addToggleButton(const QIcon &icon, const QString &text, bool checked = false);
+    ActivityButton* addToggleButton(const QIcon &icon, const QString &text, bool checked = false);
 
 private:
-    std::unique_ptr<QVBoxLayout> layout_;
-    int margin_;
-    int fixed_width_;
+    QVBoxLayout *layout_ {nullptr};
+    int margin_ {0};
+    int fixed_width_ {0};
 };
 
 

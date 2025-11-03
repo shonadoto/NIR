@@ -3,7 +3,6 @@
 #include <QPainter>
 
 namespace {
-constexpr qreal kCornerRadiusPx = 8.0;
 constexpr qreal kOutlineWidthPx = 1.0;
 }
 
@@ -20,18 +19,25 @@ QRectF SubstrateItem::boundingRect() const {
 
 void SubstrateItem::paint(QPainter *painter, const QStyleOptionGraphicsItem *, QWidget *) {
     painter->setRenderHint(QPainter::Antialiasing, true);
-    const QRectF rect = boundingRect();
+    const QRectF rect = boundingRect().adjusted(kOutlineWidthPx, kOutlineWidthPx,
+                                                -kOutlineWidthPx, -kOutlineWidthPx);
 
-    QPainterPath path;
-    path.addRoundedRect(rect.adjusted(kOutlineWidthPx, kOutlineWidthPx,
-                                      -kOutlineWidthPx, -kOutlineWidthPx),
-                        kCornerRadiusPx, kCornerRadiusPx);
+    // Fill
+    painter->fillRect(rect, QColor(240, 240, 240));
 
-    painter->fillPath(path, QColor(240, 240, 240));
+    // Outline
     QPen pen(QColor(180, 180, 180));
     pen.setWidthF(kOutlineWidthPx);
     painter->setPen(pen);
-    painter->drawPath(path);
+    painter->drawRect(rect);
+}
+
+void SubstrateItem::set_size(const QSizeF &size) {
+    if (size == size_) {
+        return;
+    }
+    prepareGeometryChange();
+    size_ = size;
 }
 
 

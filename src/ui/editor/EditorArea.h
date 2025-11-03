@@ -14,6 +14,8 @@ public:
 
     EditorView* view() const { return view_; }
     void fit_to_substrate();
+    void set_substrate_size(const QSizeF &size);
+    QSizeF substrate_size() const;
 
 private:
     void init_scene();
@@ -21,7 +23,7 @@ private:
 
 private:
     EditorView *view_ {nullptr};
-    std::unique_ptr<QGraphicsScene> scene_;
+    QGraphicsScene *scene_ {nullptr};
     SubstrateItem *substrate_ {nullptr};
     bool fitted_once_ {false};
 };
