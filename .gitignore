@@ -1,0 +1,26 @@
+# Build directories
+build/
+build-*/
+cmake-build-*/
+
+# CMake files
+CMakeFiles/
+CMakeCache.txt
+*.cmake
+*.cbp
+*.user
+*.pro.user*
+compile_commands.json
+
+# Qt Creator/IDE
+.idea/
+.vscode/
+.DS_Store
+
+# OS/Editor
+*.swp
+*.swo
+*.bak
+*.tmp
+
+
