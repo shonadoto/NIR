@@ -9,10 +9,10 @@
 #include <algorithm>
 
 namespace {
-constexpr qreal kZoomStep = 1.15;       // per mouse wheel notch
-constexpr qreal kMinScale = 0.05;       // 5%
-constexpr qreal kMaxScale = 10.0;       // 1000%
-}
+constexpr qreal kZoomStep = 1.15;  // per mouse wheel notch (symmetrical)
+constexpr qreal kMinScale = 0.70;  // 70%
+constexpr qreal kMaxScale = 100.0; // 10000%
+} // namespace
 
 EditorView::EditorView(QWidget *parent)
     : QGraphicsView(parent), scene_(new QGraphicsScene(this)) {
@@ -50,14 +50,14 @@ void EditorView::wheelEvent(QWheelEvent *event) {
   }
 
   const int num_steps = num_degrees.y() / 15; // 15 deg per notch
-  const qreal factor = (num_steps > 0) ? std::pow(kZoomStep, num_steps)
-                                       : std::pow(1.0 / kZoomStep, -num_steps);
+  qreal factor = (num_steps > 0) ? std::pow(kZoomStep, num_steps)
+                                 : std::pow(1.0 / kZoomStep, -num_steps);
   applyZoom(factor);
 }
 
 void EditorView::mousePressEvent(QMouseEvent *event) {
   if (event->button() == Qt::MiddleButton ||
-      (event->button() == Qt::LeftButton && (event->modifiers() & Qt::KeyboardModifier::ShiftModifier))) {
+      event->button() == Qt::LeftButton) {
     panning_ = true;
     last_mouse_pos_ = event->pos();
     setCursor(Qt::ClosedHandCursor);
@@ -80,8 +80,9 @@ void EditorView::mouseMoveEvent(QMouseEvent *event) {
 }
 
 void EditorView::mouseReleaseEvent(QMouseEvent *event) {
-  if (panning_ && (event->button() == Qt::MiddleButton ||
-                   (event->button() == Qt::LeftButton && (event->modifiers() & Qt::KeyboardModifier::ShiftModifier)))) {
+  if (panning_ &&
+      (event->button() == Qt::MiddleButton ||
+       event->button() == Qt::LeftButton)) {
     panning_ = false;
     setCursor(Qt::ArrowCursor);
     event->accept();
