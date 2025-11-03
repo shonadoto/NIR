@@ -39,6 +39,10 @@ if (APPLE)
     set_target_properties(NIRMaterialEditor PROPERTIES MACOSX_BUNDLE TRUE)
 endif()
 
-install(TARGETS NIRMaterialEditor RUNTIME DESTINATION bin)
+if (APPLE)
+    install(TARGETS NIRMaterialEditor BUNDLE DESTINATION .)
+else()
+    install(TARGETS NIRMaterialEditor RUNTIME DESTINATION bin)
+endif()
 
 
