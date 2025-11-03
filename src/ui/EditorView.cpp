@@ -21,6 +21,9 @@ EditorView::EditorView(QWidget *parent)
   setViewportUpdateMode(QGraphicsView::SmartViewportUpdate);
   setDragMode(QGraphicsView::NoDrag);
   setTransformationAnchor(QGraphicsView::AnchorUnderMouse);
+  setHorizontalScrollBarPolicy(Qt::ScrollBarAsNeeded);
+  setVerticalScrollBarPolicy(Qt::ScrollBarAsNeeded);
+  setAlignment(Qt::AlignCenter);
 }
 
 EditorView::~EditorView() = default;
@@ -33,7 +36,8 @@ void EditorView::fitToItem(const QGraphicsItem *item) {
   if (br.isEmpty()) {
     return;
   }
-  fitInView(br.marginsAdded(QMarginsF(20, 20, 20, 20)), Qt::KeepAspectRatio);
+  fitInView(br, Qt::KeepAspectRatio);
+  centerOn(item);
   // Update scale_ to reflect current transform approximately
   scale_ = transform().m11();
 }

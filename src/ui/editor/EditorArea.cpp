@@ -30,7 +30,7 @@ void EditorArea::init_scene() {
 
     substrate_ = new SubstrateItem(QSizeF(kDefaultSubstrateWidth, kDefaultSubstrateHeight));
     scene_->addItem(substrate_);
-    scene_->setSceneRect(substrate_->boundingRect().marginsAdded(QMarginsF(200,200,200,200)));
+    scene_->setSceneRect(substrate_->boundingRect());
 
     fit_to_substrate();
 }
