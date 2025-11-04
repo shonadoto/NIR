@@ -17,6 +17,9 @@
 #include <QGraphicsRectItem>
 #include <QGraphicsEllipseItem>
 #include <QGraphicsLineItem>
+#include <QBrush>
+#include <QPen>
+#include <QColor>
 
 namespace {
 constexpr int kDefaultObjectsBarWidthPx = 280;
@@ -68,6 +71,8 @@ void MainWindow::createActionsAndToolbar() {
     const QPointF c = editor_area_->substrate_center();
     auto *rect = new QGraphicsRectItem(QRectF(-50, -30, 100, 60));
     rect->setFlags(QGraphicsItem::ItemIsSelectable | QGraphicsItem::ItemIsMovable | QGraphicsItem::ItemSendsGeometryChanges);
+    rect->setPen(QPen(Qt::black, 1.0));
+    rect->setBrush(QBrush(QColor(128, 128, 128, 128))); // semi-transparent gray
     scene->addItem(rect);
     rect->setPos(c);
     if (auto *objectsBar = side_bar_widget_->findChild<ObjectsBar*>()) {
@@ -86,6 +91,8 @@ void MainWindow::createActionsAndToolbar() {
     const QPointF c = editor_area_->substrate_center();
     auto *ellipse = new QGraphicsEllipseItem(QRectF(-50, -30, 100, 60));
     ellipse->setFlags(QGraphicsItem::ItemIsSelectable | QGraphicsItem::ItemIsMovable | QGraphicsItem::ItemSendsGeometryChanges);
+    ellipse->setPen(QPen(Qt::black, 1.0));
+    ellipse->setBrush(QBrush(QColor(128, 128, 128, 128))); // semi-transparent gray
     scene->addItem(ellipse);
     ellipse->setPos(c);
     if (auto *objectsBar = side_bar_widget_->findChild<ObjectsBar*>()) {
@@ -104,6 +111,8 @@ void MainWindow::createActionsAndToolbar() {
     const QPointF c = editor_area_->substrate_center();
     auto *circle = new QGraphicsEllipseItem(QRectF(-40, -40, 80, 80));
     circle->setFlags(QGraphicsItem::ItemIsSelectable | QGraphicsItem::ItemIsMovable | QGraphicsItem::ItemSendsGeometryChanges);
+    circle->setPen(QPen(Qt::black, 1.0));
+    circle->setBrush(QBrush(QColor(128, 128, 128, 128))); // semi-transparent gray
     scene->addItem(circle);
     circle->setPos(c);
     if (auto *objectsBar = side_bar_widget_->findChild<ObjectsBar*>()) {

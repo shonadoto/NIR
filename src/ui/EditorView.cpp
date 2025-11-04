@@ -1,5 +1,6 @@
 #include "EditorView.h"
 
+#include "ui/editor/SubstrateItem.h"
 #include <QGraphicsItem>
 #include <QGraphicsScene>
 #include <QMouseEvent>
@@ -15,7 +16,7 @@ constexpr qreal kZoomStep = 1.15;   // per mouse wheel notch (symmetrical)
 constexpr qreal kMinScale = 0.70;   // 70%
 constexpr qreal kMaxScale = 100.0;  // 10000%
 constexpr qreal kRotateStepDeg = 5; // rotation step per notch when Ctrl held
-constexpr qreal kScaleStep = 1.05;  // item scale step per notch when Alt held
+constexpr qreal kScaleStep = 1.05;  // item scale step per notch when Shift held
 } // namespace
 
 EditorView::EditorView(QWidget *parent)
@@ -56,12 +57,12 @@ void EditorView::wheelEvent(QWheelEvent *event) {
   const int num_steps = num_degrees.y() / 15; // 15 deg per notch
   const auto mods = event->modifiers();
 
-#ifdef Q_OS_MAC
-  const bool rotateMod = mods.testFlag(Qt::ControlModifier); // Ctrl on macOS
-  const bool scaleMod = mods.testFlag(Qt::ShiftModifier);      // Option on macOS
+#ifdef Q_OS_MACOS
+  const bool rotateMod = mods & Qt::ControlModifier; // Cmd
+  const bool scaleMod = mods & Qt::AltModifier;      // Shift
 #else
   const bool rotateMod = mods & Qt::ControlModifier; // Ctrl
-  const bool scaleMod = mods & Qt::ShiftModifier;              // Alt
+  const bool scaleMod = mods & Qt::MetaModifier;     // Shift
 #endif
 
   // Transform selected items with modifiers (scale first to avoid conflict on
@@ -74,6 +75,16 @@ void EditorView::wheelEvent(QWheelEvent *event) {
       if (auto *hit = itemAt(event->position().toPoint())) {
         targets << hit;
       }
+    }
+    // Exclude substrate from scaling
+    for (int i = targets.size() - 1; i >= 0; --i) {
+      if (dynamic_cast<SubstrateItem *>(targets[i]) != nullptr) {
+        targets.removeAt(i);
+      }
+    }
+    if (targets.isEmpty()) {
+      event->accept();
+      return;
     }
     for (QGraphicsItem *it : targets) {
       it->setTransformOriginPoint(it->boundingRect().center());
@@ -92,6 +103,16 @@ void EditorView::wheelEvent(QWheelEvent *event) {
       if (auto *hit = itemAt(event->position().toPoint())) {
         targets << hit;
       }
+    }
+    // Exclude substrate from rotation
+    for (int i = targets.size() - 1; i >= 0; --i) {
+      if (dynamic_cast<SubstrateItem *>(targets[i]) != nullptr) {
+        targets.removeAt(i);
+      }
+    }
+    if (targets.isEmpty()) {
+      event->accept();
+      return;
     }
     for (QGraphicsItem *it : targets) {
       it->setRotation(it->rotation() + delta);

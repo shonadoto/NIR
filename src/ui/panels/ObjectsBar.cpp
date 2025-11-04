@@ -4,6 +4,8 @@
 #include <QVBoxLayout>
 #include <QEvent>
 #include <QKeyEvent>
+#include <QItemSelectionModel>
+#include <algorithm>
 
 namespace {
 constexpr int kMinObjectsBarWidthPx = 220;
@@ -52,13 +54,29 @@ void ObjectsBar::set_model(QAbstractItemModel *model) {
 
 bool ObjectsBar::eventFilter(QObject *obj, QEvent *event) {
     if (obj == tree_view_) {
-        if (auto *ke = dynamic_cast<QKeyEvent*>(event)) {
+        if (event->type() == QEvent::KeyPress) {
+            auto *ke = static_cast<QKeyEvent*>(event);
+            if (ke->isAutoRepeat()) {
+                return false; // ignore auto-repeat to prevent deleting multiple items unintentionally
+            }
             if (ke->key() == Qt::Key_Delete || ke->key() == Qt::Key_Backspace) {
                 if (auto *m = tree_view_->model()) {
-                    const QModelIndex idx = tree_view_->currentIndex();
-                    if (idx.isValid()) {
-                        m->removeRow(idx.row(), idx.parent());
-                        return true;
+                    if (auto *sel = tree_view_->selectionModel()) {
+                        // Delete all selected rows (column 0) from bottom to top
+                        QList<QModelIndex> rows = sel->selectedRows(0);
+                        std::sort(rows.begin(), rows.end(), [](const QModelIndex &a, const QModelIndex &b){
+                            return a.row() > b.row();
+                        });
+                        bool anyRemoved = false;
+                        for (const QModelIndex &idx : rows) {
+                            if (!idx.isValid()) continue;
+                            // Skip substrate at row 0 (protected by model too)
+                            if (idx.row() == 0 && !idx.parent().isValid()) continue;
+                            anyRemoved |= m->removeRow(idx.row(), idx.parent());
+                        }
+                        if (anyRemoved) {
+                            return true; // handled
+                        }
                     }
                 }
             }
