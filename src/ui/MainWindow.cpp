@@ -13,6 +13,7 @@
 #include "ui/sidebar/SideBarWidget.h"
 #include "ui/editor/SubstrateDialog.h"
 #include "ui/editor/SubstrateItem.h"
+#include "ui/panels/PropertiesBar.h"
 #include "model/ObjectTreeModel.h"
 #include <QGraphicsRectItem>
 #include <QGraphicsEllipseItem>
@@ -157,8 +158,19 @@ void MainWindow::createActivityObjectsBarAndEditor() {
       "objects", QIcon(":/icons/objects.svg"),
       new ObjectsBar(side_bar_widget_), kDefaultObjectsBarWidthPx);
 
-  // Right: Editor area
-  editor_area_ = new EditorArea(splitter);
+  // Middle/Right: Editor area + Properties bar
+  auto *rightSplitter = new QSplitter(Qt::Horizontal, splitter);
+  rightSplitter->setChildrenCollapsible(false);
+  rightSplitter->setHandleWidth(1);
+
+  editor_area_ = new EditorArea(rightSplitter);
+  properties_bar_ = new PropertiesBar(rightSplitter);
+  properties_bar_->setVisible(false); // hidden until selection
+
+  rightSplitter->addWidget(editor_area_);
+  rightSplitter->addWidget(properties_bar_);
+  rightSplitter->setStretchFactor(0, 1);
+  rightSplitter->setStretchFactor(1, 0);
 
   // Object tree model (root + substrate)
   auto *treeModel = new ObjectTreeModel(this);
@@ -181,24 +193,40 @@ void MainWindow::createActivityObjectsBarAndEditor() {
                 if (!scene) return;
                 scene->clearSelection();
                 item->setSelected(true);
+                // Update properties bar
+                if (properties_bar_) {
+                  properties_bar_->set_selected_item(item);
+                  properties_bar_->setVisible(true);
+                }
               });
       // Scene -> Tree selection
       if (auto *scene = editor_area_->scene()) {
         connect(scene, &QGraphicsScene::selectionChanged, this, [this, treeModel, treeView]{
           auto items = editor_area_->scene()->selectedItems();
-          if (items.isEmpty()) return;
+          if (items.isEmpty()) {
+            if (properties_bar_) {
+              properties_bar_->clear();
+              properties_bar_->setVisible(false);
+            }
+            return;
+          }
           QModelIndex idx = treeModel->index_from_item(items.first());
           if (idx.isValid()) {
             treeView->selectionModel()->setCurrentIndex(idx, QItemSelectionModel::ClearAndSelect);
+          }
+          // Update properties bar
+          if (properties_bar_) {
+            properties_bar_->set_selected_item(items.first());
+            properties_bar_->setVisible(true);
           }
         });
       }
     }
   }
 
-  // Put into splitter
+  // Put into main splitter
   splitter->addWidget(side_bar_widget_);
-  splitter->addWidget(editor_area_);
+  splitter->addWidget(rightSplitter);
   splitter->setStretchFactor(0, 0);
   splitter->setStretchFactor(1, 1);
 

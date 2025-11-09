@@ -5,6 +5,7 @@ set(SOURCES
     ui/activity/ActivityBar.cpp
     ui/activity/ActivityButton.cpp
     ui/panels/ObjectsBar.cpp
+    ui/panels/PropertiesBar.cpp
     ui/editor/EditorArea.cpp
     ui/editor/SubstrateItem.cpp
     ui/editor/SubstrateDialog.cpp
@@ -18,6 +19,7 @@ set(HEADERS
     ui/activity/ActivityBar.h
     ui/activity/ActivityButton.h
     ui/panels/ObjectsBar.h
+    ui/panels/PropertiesBar.h
     ui/editor/EditorArea.h
     ui/editor/SubstrateItem.h
     ui/editor/SubstrateDialog.h

@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24">
+  <!-- Background panel -->
+  <rect x="2" y="2" width="20" height="20" rx="4" ry="4" fill="#e0e0e0"/>
+  <!-- Sliders icon -->
+  <rect x="6" y="7" width="12" height="2" fill="#62aef7"/>
+  <circle cx="13" cy="8" r="2" fill="#62aef7"/>
+  <rect x="6" y="15" width="12" height="2" fill="#7fd37f"/>
+  <circle cx="10" cy="16" r="2" fill="#7fd37f"/>
+</svg>
+
