@@ -1,8 +1,9 @@
 #pragma once
 
 #include <QGraphicsItem>
+#include "scene/ISceneObject.h"
 
-class SubstrateItem : public QGraphicsItem {
+class SubstrateItem : public QGraphicsItem, public ISceneObject {
 public:
     explicit SubstrateItem(const QSizeF &size);
 
@@ -12,8 +13,15 @@ public:
     QSizeF size() const { return size_; }
     void set_size(const QSizeF &size);
 
+    QColor fill_color() const { return fill_color_; }
+    void set_fill_color(const QColor &color);
+
+    // ISceneObject interface
+    QWidget* create_properties_widget(QWidget *parent) override;
+
 private:
     QSizeF size_;
+    QColor fill_color_ {240, 240, 240};
 };
 
 

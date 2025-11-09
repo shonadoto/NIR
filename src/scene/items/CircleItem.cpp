@@ -1,0 +1,66 @@
+#include "CircleItem.h"
+
+#include <QBrush>
+#include <QColor>
+#include <QColorDialog>
+#include <QDoubleSpinBox>
+#include <QFormLayout>
+#include <QPen>
+#include <QPushButton>
+
+namespace {
+constexpr double kMinRadiusPx = 1.0;
+constexpr double kMaxRadiusPx = 10000.0;
+constexpr double kMinRotationDeg = -360.0;
+constexpr double kMaxRotationDeg = 360.0;
+}
+
+CircleItem::CircleItem(qreal radius, QGraphicsItem *parent)
+    : QGraphicsEllipseItem(QRectF(-radius, -radius, 2*radius, 2*radius), parent) {
+    setFlags(QGraphicsItem::ItemIsSelectable | QGraphicsItem::ItemIsMovable |
+             QGraphicsItem::ItemSendsGeometryChanges);
+    setPen(QPen(Qt::black, 1.0));
+    setBrush(QBrush(QColor(128, 128, 128, 128)));
+    setTransformOriginPoint(boundingRect().center());
+}
+
+QWidget* CircleItem::create_properties_widget(QWidget *parent) {
+    auto *widget = new QWidget(parent);
+    auto *form = new QFormLayout(widget);
+    form->setContentsMargins(0, 0, 0, 0);
+
+    auto *radiusSpin = new QDoubleSpinBox(widget);
+    radiusSpin->setRange(kMinRadiusPx, kMaxRadiusPx);
+    radiusSpin->setDecimals(1);
+    radiusSpin->setValue(rect().width() / 2.0);
+    QObject::connect(radiusSpin, QOverload<double>::of(&QDoubleSpinBox::valueChanged), widget, [this, radiusSpin]{
+        qreal r = radiusSpin->value();
+        setRect(QRectF(-r, -r, 2*r, 2*r));
+        setTransformOriginPoint(boundingRect().center());
+    });
+
+    auto *rotationSpin = new QDoubleSpinBox(widget);
+    rotationSpin->setRange(kMinRotationDeg, kMaxRotationDeg);
+    rotationSpin->setDecimals(1);
+    rotationSpin->setSingleStep(5.0);
+    rotationSpin->setSuffix("°");
+    rotationSpin->setValue(rotation());
+    QObject::connect(rotationSpin, QOverload<double>::of(&QDoubleSpinBox::valueChanged), widget, [this, rotationSpin]{
+        setRotation(rotationSpin->value());
+    });
+
+    auto *colorBtn = new QPushButton("Choose Color", widget);
+    QObject::connect(colorBtn, &QPushButton::clicked, widget, [this, colorBtn]{
+        QColor c = QColorDialog::getColor(brush().color(), colorBtn, "Choose Fill Color", QColorDialog::ShowAlphaChannel);
+        if (c.isValid()) {
+            setBrush(QBrush(c));
+        }
+    });
+
+    form->addRow("Radius:", radiusSpin);
+    form->addRow("Rotation:", rotationSpin);
+    form->addRow("Color:", colorBtn);
+
+    return widget;
+}
+

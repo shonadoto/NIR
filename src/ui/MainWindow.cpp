@@ -15,12 +15,11 @@
 #include "ui/editor/SubstrateItem.h"
 #include "ui/panels/PropertiesBar.h"
 #include "model/ObjectTreeModel.h"
-#include <QGraphicsRectItem>
-#include <QGraphicsEllipseItem>
-#include <QGraphicsLineItem>
-#include <QBrush>
-#include <QPen>
-#include <QColor>
+#include "scene/ISceneObject.h"
+#include "scene/items/RectangleItem.h"
+#include "scene/items/EllipseItem.h"
+#include "scene/items/CircleItem.h"
+#include "scene/items/StickItem.h"
 
 namespace {
 constexpr int kDefaultObjectsBarWidthPx = 280;
@@ -70,10 +69,7 @@ void MainWindow::createActionsAndToolbar() {
     auto *scene = editor_area_->scene();
     if (!scene) return;
     const QPointF c = editor_area_->substrate_center();
-    auto *rect = new QGraphicsRectItem(QRectF(-50, -30, 100, 60));
-    rect->setFlags(QGraphicsItem::ItemIsSelectable | QGraphicsItem::ItemIsMovable | QGraphicsItem::ItemSendsGeometryChanges);
-    rect->setPen(QPen(Qt::black, 1.0));
-    rect->setBrush(QBrush(QColor(128, 128, 128, 128))); // semi-transparent gray
+    auto *rect = new RectangleItem(QRectF(-50, -30, 100, 60));
     scene->addItem(rect);
     rect->setPos(c);
     if (auto *objectsBar = side_bar_widget_->findChild<ObjectsBar*>()) {
@@ -90,10 +86,7 @@ void MainWindow::createActionsAndToolbar() {
     auto *scene = editor_area_->scene();
     if (!scene) return;
     const QPointF c = editor_area_->substrate_center();
-    auto *ellipse = new QGraphicsEllipseItem(QRectF(-50, -30, 100, 60));
-    ellipse->setFlags(QGraphicsItem::ItemIsSelectable | QGraphicsItem::ItemIsMovable | QGraphicsItem::ItemSendsGeometryChanges);
-    ellipse->setPen(QPen(Qt::black, 1.0));
-    ellipse->setBrush(QBrush(QColor(128, 128, 128, 128))); // semi-transparent gray
+    auto *ellipse = new EllipseItem(QRectF(-50, -30, 100, 60));
     scene->addItem(ellipse);
     ellipse->setPos(c);
     if (auto *objectsBar = side_bar_widget_->findChild<ObjectsBar*>()) {
@@ -110,10 +103,7 @@ void MainWindow::createActionsAndToolbar() {
     auto *scene = editor_area_->scene();
     if (!scene) return;
     const QPointF c = editor_area_->substrate_center();
-    auto *circle = new QGraphicsEllipseItem(QRectF(-40, -40, 80, 80));
-    circle->setFlags(QGraphicsItem::ItemIsSelectable | QGraphicsItem::ItemIsMovable | QGraphicsItem::ItemSendsGeometryChanges);
-    circle->setPen(QPen(Qt::black, 1.0));
-    circle->setBrush(QBrush(QColor(128, 128, 128, 128))); // semi-transparent gray
+    auto *circle = new CircleItem(40);
     scene->addItem(circle);
     circle->setPos(c);
     if (auto *objectsBar = side_bar_widget_->findChild<ObjectsBar*>()) {
@@ -130,11 +120,7 @@ void MainWindow::createActionsAndToolbar() {
     auto *scene = editor_area_->scene();
     if (!scene) return;
     const QPointF c = editor_area_->substrate_center();
-    auto *stick = new QGraphicsLineItem(QLineF(-50, 0, 50, 0));
-    stick->setFlags(QGraphicsItem::ItemIsSelectable | QGraphicsItem::ItemIsMovable | QGraphicsItem::ItemSendsGeometryChanges);
-    QPen pen(Qt::black);
-    pen.setWidthF(2.0);
-    stick->setPen(pen);
+    auto *stick = new StickItem(QLineF(-50, 0, 50, 0));
     scene->addItem(stick);
     stick->setPos(c);
     if (auto *objectsBar = side_bar_widget_->findChild<ObjectsBar*>()) {
@@ -195,8 +181,10 @@ void MainWindow::createActivityObjectsBarAndEditor() {
                 item->setSelected(true);
                 // Update properties bar
                 if (properties_bar_) {
-                  properties_bar_->set_selected_item(item);
-                  properties_bar_->setVisible(true);
+                  if (auto *sceneObj = dynamic_cast<ISceneObject*>(item)) {
+                    properties_bar_->set_selected_item(sceneObj);
+                    properties_bar_->setVisible(true);
+                  }
                 }
               });
       // Scene -> Tree selection
@@ -216,8 +204,10 @@ void MainWindow::createActivityObjectsBarAndEditor() {
           }
           // Update properties bar
           if (properties_bar_) {
-            properties_bar_->set_selected_item(items.first());
-            properties_bar_->setVisible(true);
+            if (auto *sceneObj = dynamic_cast<ISceneObject*>(items.first())) {
+              properties_bar_->set_selected_item(sceneObj);
+              properties_bar_->setVisible(true);
+            }
           }
         });
       }
