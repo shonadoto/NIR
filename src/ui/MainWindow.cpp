@@ -44,7 +44,12 @@ MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent) {
   resize(1200, 800);
 }
 
-MainWindow::~MainWindow() = default;
+MainWindow::~MainWindow() {
+    // Ensure properties bar clears before scene/items are destroyed
+    if (properties_bar_) {
+        properties_bar_->clear();
+    }
+}
 
 void MainWindow::createMenuBar() {
   auto *fileMenu = menuBar()->addMenu("File");

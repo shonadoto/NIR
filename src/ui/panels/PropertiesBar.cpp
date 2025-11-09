@@ -40,7 +40,12 @@ PropertiesBar::PropertiesBar(QWidget *parent)
     preferred_width_ = kDefaultPropertiesBarWidthPx;
 }
 
-PropertiesBar::~PropertiesBar() = default;
+PropertiesBar::~PropertiesBar() {
+    if (content_widget_) {
+        content_widget_->deleteLater();
+        content_widget_ = nullptr;
+    }
+}
 
 void PropertiesBar::set_selected_item(ISceneObject *item, const QString &name) {
     current_item_ = item;
@@ -83,9 +88,13 @@ void PropertiesBar::update_name(const QString &name) {
 
 void PropertiesBar::clear() {
     current_item_ = nullptr;
+    updating_ = true;
+    name_edit_->clear();
+    type_label_->setText("Type: ");
     if (content_widget_) {
         layout_->removeWidget(content_widget_);
         content_widget_->deleteLater();
         content_widget_ = nullptr;
     }
+    updating_ = false;
 }
