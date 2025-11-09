@@ -78,6 +78,7 @@ QWidget* StickItem::create_properties_widget(QWidget *parent) {
 QJsonObject StickItem::to_json() const {
     QJsonObject obj;
     obj["type"] = type_name();
+    obj["name"] = name_;
     obj["position"] = QJsonArray{pos().x(), pos().y()};
     obj["rotation"] = rotation();
     QLineF l = line();
@@ -92,6 +93,9 @@ QJsonObject StickItem::to_json() const {
 }
 
 void StickItem::from_json(const QJsonObject &json) {
+    if (json.contains("name")) {
+        name_ = json["name"].toString();
+    }
     if (json.contains("position")) {
         QJsonArray p = json["position"].toArray();
         setPos(p[0].toDouble(), p[1].toDouble());

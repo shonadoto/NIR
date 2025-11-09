@@ -13,5 +13,10 @@ public:
     QJsonObject to_json() const override;
     void from_json(const QJsonObject &json) override;
     QString type_name() const override { return QStringLiteral("rectangle"); }
+    QString name() const override { return name_; }
+    void set_name(const QString &name) override { name_ = name; }
+
+private:
+    QString name_ {"Rectangle"};
 };
 

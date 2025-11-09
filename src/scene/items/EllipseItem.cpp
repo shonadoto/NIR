@@ -82,6 +82,7 @@ QWidget* EllipseItem::create_properties_widget(QWidget *parent) {
 QJsonObject EllipseItem::to_json() const {
     QJsonObject obj;
     obj["type"] = type_name();
+    obj["name"] = name_;
     obj["position"] = QJsonArray{pos().x(), pos().y()};
     obj["rotation"] = rotation();
     obj["width"] = rect().width();
@@ -92,6 +93,9 @@ QJsonObject EllipseItem::to_json() const {
 }
 
 void EllipseItem::from_json(const QJsonObject &json) {
+    if (json.contains("name")) {
+        name_ = json["name"].toString();
+    }
     if (json.contains("position")) {
         QJsonArray p = json["position"].toArray();
         setPos(p[0].toDouble(), p[1].toDouble());

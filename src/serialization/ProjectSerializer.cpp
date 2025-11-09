@@ -78,11 +78,15 @@ bool ProjectSerializer::load_from_file(const QString &filename, EditorArea *edit
         return false;
     }
 
-    // Clear existing scene (except substrate)
+    // Clear existing scene (except substrate) and model
     auto *scene = editor_area->scene();
     if (!scene) {
         return false;
     }
+
+    // Clear model items first (will trigger tree updates)
+    model->clear_items();
+
     QList<QGraphicsItem*> toRemove;
     for (QGraphicsItem *item : scene->items()) {
         if (dynamic_cast<SubstrateItem*>(item) == nullptr) {
@@ -98,6 +102,7 @@ bool ProjectSerializer::load_from_file(const QString &filename, EditorArea *edit
     if (root.contains("substrate")) {
         if (auto *substrate = editor_area->substrate_item()) {
             substrate->from_json(root["substrate"].toObject());
+            model->set_substrate(substrate);
         }
     }
 
@@ -114,25 +119,25 @@ bool ProjectSerializer::load_from_file(const QString &filename, EditorArea *edit
                 rect->from_json(obj);
                 scene->addItem(rect);
                 newItem = rect;
-                model->add_item(rect, "Rectangle");
+                model->add_item(rect, rect->name());
             } else if (type == "ellipse") {
                 auto *ellipse = new EllipseItem(QRectF(0, 0, 100, 60));
                 ellipse->from_json(obj);
                 scene->addItem(ellipse);
                 newItem = ellipse;
-                model->add_item(ellipse, "Ellipse");
+                model->add_item(ellipse, ellipse->name());
             } else if (type == "circle") {
                 auto *circle = new CircleItem(40);
                 circle->from_json(obj);
                 scene->addItem(circle);
                 newItem = circle;
-                model->add_item(circle, "Circle");
+                model->add_item(circle, circle->name());
             } else if (type == "stick") {
                 auto *stick = new StickItem(QLineF(0, 0, 100, 0));
                 stick->from_json(obj);
                 scene->addItem(stick);
                 newItem = stick;
-                model->add_item(stick, "Stick");
+                model->add_item(stick, stick->name());
             }
         }
     }

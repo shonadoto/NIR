@@ -41,5 +41,15 @@ public:
      * @return QString type name (e.g. "rectangle", "ellipse", "circle", "stick", "substrate")
      */
     virtual QString type_name() const = 0;
+
+    /**
+     * @brief Get object name.
+     */
+    virtual QString name() const = 0;
+
+    /**
+     * @brief Set object name.
+     */
+    virtual void set_name(const QString &name) = 0;
 };
 

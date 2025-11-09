@@ -33,9 +33,12 @@ public:
 
     // Modification API
     void add_item(QGraphicsItem *item, const QString &name);
+    QString get_item_name(QGraphicsItem *item) const;
+    void clear_items();
 
 private:
     SubstrateItem *substrate_ {nullptr};
+    QString substrate_name_ {"Substrate"};
     QVector<QGraphicsItem*> items_; // future shapes
     QHash<QGraphicsItem*, QString> names_;
     QGraphicsScene *scene_ {nullptr};

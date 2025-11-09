@@ -69,6 +69,7 @@ QWidget* CircleItem::create_properties_widget(QWidget *parent) {
 QJsonObject CircleItem::to_json() const {
     QJsonObject obj;
     obj["type"] = type_name();
+    obj["name"] = name_;
     obj["position"] = QJsonArray{pos().x(), pos().y()};
     obj["rotation"] = rotation();
     obj["radius"] = rect().width() / 2.0;
@@ -78,6 +79,9 @@ QJsonObject CircleItem::to_json() const {
 }
 
 void CircleItem::from_json(const QJsonObject &json) {
+    if (json.contains("name")) {
+        name_ = json["name"].toString();
+    }
     if (json.contains("position")) {
         QJsonArray p = json["position"].toArray();
         setPos(p[0].toDouble(), p[1].toDouble());

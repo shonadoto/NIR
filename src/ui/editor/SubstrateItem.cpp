@@ -71,6 +71,7 @@ QWidget* SubstrateItem::create_properties_widget(QWidget *parent) {
 QJsonObject SubstrateItem::to_json() const {
     QJsonObject obj;
     obj["type"] = type_name();
+    obj["name"] = name_;
     obj["width"] = size_.width();
     obj["height"] = size_.height();
     obj["fill_color"] = QJsonArray{fill_color_.red(), fill_color_.green(), fill_color_.blue(), fill_color_.alpha()};
@@ -78,6 +79,9 @@ QJsonObject SubstrateItem::to_json() const {
 }
 
 void SubstrateItem::from_json(const QJsonObject &json) {
+    if (json.contains("name")) {
+        name_ = json["name"].toString();
+    }
     if (json.contains("width") && json.contains("height")) {
         set_size(QSizeF(json["width"].toDouble(), json["height"].toDouble()));
     }
