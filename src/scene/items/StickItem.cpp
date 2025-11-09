@@ -5,6 +5,8 @@
 #include <QFormLayout>
 #include <QPen>
 #include <QPushButton>
+#include <QJsonObject>
+#include <QJsonArray>
 #include <cmath>
 
 namespace {
@@ -71,5 +73,46 @@ QWidget* StickItem::create_properties_widget(QWidget *parent) {
     form->addRow("Color:", colorBtn);
 
     return widget;
+}
+
+QJsonObject StickItem::to_json() const {
+    QJsonObject obj;
+    obj["type"] = type_name();
+    obj["position"] = QJsonArray{pos().x(), pos().y()};
+    obj["rotation"] = rotation();
+    QLineF l = line();
+    obj["line"] = QJsonObject{
+        {"x1", l.x1()}, {"y1", l.y1()},
+        {"x2", l.x2()}, {"y2", l.y2()}
+    };
+    QColor c = pen().color();
+    obj["pen_color"] = QJsonArray{c.red(), c.green(), c.blue(), c.alpha()};
+    obj["pen_width"] = pen().widthF();
+    return obj;
+}
+
+void StickItem::from_json(const QJsonObject &json) {
+    if (json.contains("position")) {
+        QJsonArray p = json["position"].toArray();
+        setPos(p[0].toDouble(), p[1].toDouble());
+    }
+    if (json.contains("rotation")) {
+        setRotation(json["rotation"].toDouble());
+    }
+    if (json.contains("line")) {
+        QJsonObject l = json["line"].toObject();
+        setLine(QLineF(l["x1"].toDouble(), l["y1"].toDouble(),
+                       l["x2"].toDouble(), l["y2"].toDouble()));
+        setTransformOriginPoint(boundingRect().center());
+    }
+    if (json.contains("pen_color")) {
+        QJsonArray c = json["pen_color"].toArray();
+        QPen p = pen();
+        p.setColor(QColor(c[0].toInt(), c[1].toInt(), c[2].toInt(), c[3].toInt()));
+        if (json.contains("pen_width")) {
+            p.setWidthF(json["pen_width"].toDouble());
+        }
+        setPen(p);
+    }
 }
 

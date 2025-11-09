@@ -9,6 +9,7 @@ class SideBarWidget;
 class ObjectsBar;
 class EditorArea;
 class PropertiesBar;
+class ObjectTreeModel;
 
 class MainWindow : public QMainWindow {
     Q_OBJECT
@@ -17,12 +18,16 @@ public:
     ~MainWindow() override;
 
 private:
+    void createMenuBar();
     void createActionsAndToolbar();
     void createActivityObjectsBarAndEditor();
+    void save_project();
+    void open_project();
 
 
 private:
     SideBarWidget *side_bar_widget_ {nullptr};
     EditorArea *editor_area_ {nullptr};
     PropertiesBar *properties_bar_ {nullptr};
+    ObjectTreeModel *tree_model_ {nullptr};
 };

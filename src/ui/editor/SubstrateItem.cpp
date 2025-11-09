@@ -4,6 +4,8 @@
 #include <QFormLayout>
 #include <QPushButton>
 #include <QColorDialog>
+#include <QJsonObject>
+#include <QJsonArray>
 
 namespace {
 constexpr qreal kOutlineWidthPx = 1.0;
@@ -64,6 +66,25 @@ QWidget* SubstrateItem::create_properties_widget(QWidget *parent) {
     form->addRow("Color:", colorBtn);
 
     return widget;
+}
+
+QJsonObject SubstrateItem::to_json() const {
+    QJsonObject obj;
+    obj["type"] = type_name();
+    obj["width"] = size_.width();
+    obj["height"] = size_.height();
+    obj["fill_color"] = QJsonArray{fill_color_.red(), fill_color_.green(), fill_color_.blue(), fill_color_.alpha()};
+    return obj;
+}
+
+void SubstrateItem::from_json(const QJsonObject &json) {
+    if (json.contains("width") && json.contains("height")) {
+        set_size(QSizeF(json["width"].toDouble(), json["height"].toDouble()));
+    }
+    if (json.contains("fill_color")) {
+        QJsonArray c = json["fill_color"].toArray();
+        set_fill_color(QColor(c[0].toInt(), c[1].toInt(), c[2].toInt(), c[3].toInt()));
+    }
 }
 
 

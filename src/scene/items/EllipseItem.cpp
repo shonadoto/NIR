@@ -7,6 +7,8 @@
 #include <QFormLayout>
 #include <QPen>
 #include <QPushButton>
+#include <QJsonObject>
+#include <QJsonArray>
 
 namespace {
 constexpr double kMinSizePx = 1.0;
@@ -75,5 +77,38 @@ QWidget* EllipseItem::create_properties_widget(QWidget *parent) {
     form->addRow("Color:", colorBtn);
 
     return widget;
+}
+
+QJsonObject EllipseItem::to_json() const {
+    QJsonObject obj;
+    obj["type"] = type_name();
+    obj["position"] = QJsonArray{pos().x(), pos().y()};
+    obj["rotation"] = rotation();
+    obj["width"] = rect().width();
+    obj["height"] = rect().height();
+    QColor c = brush().color();
+    obj["fill_color"] = QJsonArray{c.red(), c.green(), c.blue(), c.alpha()};
+    return obj;
+}
+
+void EllipseItem::from_json(const QJsonObject &json) {
+    if (json.contains("position")) {
+        QJsonArray p = json["position"].toArray();
+        setPos(p[0].toDouble(), p[1].toDouble());
+    }
+    if (json.contains("rotation")) {
+        setRotation(json["rotation"].toDouble());
+    }
+    if (json.contains("width") && json.contains("height")) {
+        QRectF r = rect();
+        r.setWidth(json["width"].toDouble());
+        r.setHeight(json["height"].toDouble());
+        setRect(r);
+        setTransformOriginPoint(boundingRect().center());
+    }
+    if (json.contains("fill_color")) {
+        QJsonArray c = json["fill_color"].toArray();
+        setBrush(QBrush(QColor(c[0].toInt(), c[1].toInt(), c[2].toInt(), c[3].toInt())));
+    }
 }
 

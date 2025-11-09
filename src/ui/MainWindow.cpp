@@ -20,6 +20,11 @@
 #include "scene/items/EllipseItem.h"
 #include "scene/items/CircleItem.h"
 #include "scene/items/StickItem.h"
+#include "serialization/ProjectSerializer.h"
+#include <QFileDialog>
+#include <QKeySequence>
+#include <QMenuBar>
+#include <QStatusBar>
 
 namespace {
 constexpr int kDefaultObjectsBarWidthPx = 280;
@@ -30,12 +35,34 @@ MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent) {
   setWindowIcon(QIcon(":/icons/app.svg"));
 
   createActivityObjectsBarAndEditor();
+  createMenuBar();
   createActionsAndToolbar();
 
   resize(1200, 800);
 }
 
 MainWindow::~MainWindow() = default;
+
+void MainWindow::createMenuBar() {
+  auto *fileMenu = menuBar()->addMenu("File");
+
+  auto *saveAction = new QAction("Save...", this);
+  saveAction->setShortcut(QKeySequence::Save);
+  connect(saveAction, &QAction::triggered, this, &MainWindow::save_project);
+  fileMenu->addAction(saveAction);
+
+  auto *openAction = new QAction("Open...", this);
+  openAction->setShortcut(QKeySequence::Open);
+  connect(openAction, &QAction::triggered, this, &MainWindow::open_project);
+  fileMenu->addAction(openAction);
+
+  fileMenu->addSeparator();
+
+  auto *quitAction = new QAction("Quit", this);
+  quitAction->setShortcut(QKeySequence::Quit);
+  connect(quitAction, &QAction::triggered, this, &QMainWindow::close);
+  fileMenu->addAction(quitAction);
+}
 
 void MainWindow::createActionsAndToolbar() {
   auto *toolbar = addToolBar("Tools");
@@ -159,21 +186,21 @@ void MainWindow::createActivityObjectsBarAndEditor() {
   rightSplitter->setStretchFactor(1, 0);
 
   // Object tree model (root + substrate)
-  auto *treeModel = new ObjectTreeModel(this);
-  treeModel->set_substrate(editor_area_->substrate_item());
+  tree_model_ = new ObjectTreeModel(this);
+  tree_model_->set_substrate(editor_area_->substrate_item());
   // Bind model to the Objects bar (first sidebar entry)
   // We know SideBarWidget registered the "objects" page as index 0
   // so we can safely find the first page's widget and cast to ObjectsBar
   // Alternatively SideBarWidget could expose a getter; for now we search children
   if (auto *objectsBar = side_bar_widget_->findChild<ObjectsBar*>()) {
-    objectsBar->set_model(treeModel);
+    objectsBar->set_model(tree_model_);
     auto *treeView = objectsBar->treeView();
     if (treeView) {
       // Tree -> Scene selection
       connect(treeView->selectionModel(), &QItemSelectionModel::currentChanged, this,
-              [this, treeModel](const QModelIndex &current, const QModelIndex &){
+              [this](const QModelIndex &current, const QModelIndex &){
                 if (!editor_area_) return;
-                auto *item = treeModel->item_from_index(current);
+                auto *item = tree_model_->item_from_index(current);
                 if (!item) return;
                 auto *scene = editor_area_->scene();
                 if (!scene) return;
@@ -189,7 +216,7 @@ void MainWindow::createActivityObjectsBarAndEditor() {
               });
       // Scene -> Tree selection
       if (auto *scene = editor_area_->scene()) {
-        connect(scene, &QGraphicsScene::selectionChanged, this, [this, treeModel, treeView]{
+        connect(scene, &QGraphicsScene::selectionChanged, this, [this, treeView]{
           auto items = editor_area_->scene()->selectedItems();
           if (items.isEmpty()) {
             if (properties_bar_) {
@@ -198,7 +225,7 @@ void MainWindow::createActivityObjectsBarAndEditor() {
             }
             return;
           }
-          QModelIndex idx = treeModel->index_from_item(items.first());
+          QModelIndex idx = tree_model_->index_from_item(items.first());
           if (idx.isValid()) {
             treeView->selectionModel()->setCurrentIndex(idx, QItemSelectionModel::ClearAndSelect);
           }
@@ -225,5 +252,29 @@ void MainWindow::createActivityObjectsBarAndEditor() {
   splitter->setSizes(sizes);
 
   setCentralWidget(splitter);
+}
+
+void MainWindow::save_project() {
+  QString filename = QFileDialog::getSaveFileName(this, "Save Project", "", "NIR Project (*.nir);;JSON Files (*.json)");
+  if (filename.isEmpty()) {
+    return;
+  }
+  if (ProjectSerializer::save_to_file(filename, editor_area_, tree_model_)) {
+    statusBar()->showMessage("Project saved successfully", 3000);
+  } else {
+    statusBar()->showMessage("Failed to save project", 3000);
+  }
+}
+
+void MainWindow::open_project() {
+  QString filename = QFileDialog::getOpenFileName(this, "Open Project", "", "NIR Project (*.nir);;JSON Files (*.json)");
+  if (filename.isEmpty()) {
+    return;
+  }
+  if (ProjectSerializer::load_from_file(filename, editor_area_, tree_model_)) {
+    statusBar()->showMessage("Project loaded successfully", 3000);
+  } else {
+    statusBar()->showMessage("Failed to load project", 3000);
+  }
 }
 

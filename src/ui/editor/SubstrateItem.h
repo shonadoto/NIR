@@ -18,6 +18,9 @@ public:
 
     // ISceneObject interface
     QWidget* create_properties_widget(QWidget *parent) override;
+    QJsonObject to_json() const override;
+    void from_json(const QJsonObject &json) override;
+    QString type_name() const override { return QStringLiteral("substrate"); }
 
 private:
     QSizeF size_;
