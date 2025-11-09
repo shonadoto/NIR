@@ -1,6 +1,7 @@
 #include "PropertiesBar.h"
 
 #include <QLabel>
+#include <QLineEdit>
 #include <QVBoxLayout>
 #include "scene/ISceneObject.h"
 
@@ -15,11 +16,22 @@ PropertiesBar::PropertiesBar(QWidget *parent)
     layout_->setContentsMargins(8, 8, 8, 8);
     layout_->setSpacing(4);
 
-    title_ = new QLabel("Properties", this);
-    QFont f = title_->font();
+    type_label_ = new QLabel("Type: ", this);
+    QFont f = type_label_->font();
     f.setBold(true);
-    title_->setFont(f);
-    layout_->addWidget(title_);
+    type_label_->setFont(f);
+    layout_->addWidget(type_label_);
+
+    name_edit_ = new QLineEdit(this);
+    name_edit_->setPlaceholderText("Object name");
+    connect(name_edit_, &QLineEdit::textChanged, this, [this](const QString &text){
+        if (updating_ || !current_item_) {
+            return;
+        }
+        current_item_->set_name(text);
+        emit name_changed(text);
+    });
+    layout_->addWidget(name_edit_);
 
     layout_->addStretch();
 
@@ -28,10 +40,17 @@ PropertiesBar::PropertiesBar(QWidget *parent)
     preferred_width_ = kDefaultPropertiesBarWidthPx;
 }
 
-PropertiesBar::~PropertiesBar() = default;
+PropertiesBar::~PropertiesBar() {
+    if (content_widget_) {
+        content_widget_->deleteLater();
+        content_widget_ = nullptr;
+    }
+}
 
-void PropertiesBar::set_selected_item(ISceneObject *item) {
+void PropertiesBar::set_selected_item(ISceneObject *item, const QString &name) {
     current_item_ = item;
+    updating_ = true;
+
     // Remove old content
     if (content_widget_) {
         layout_->removeWidget(content_widget_);
@@ -40,20 +59,42 @@ void PropertiesBar::set_selected_item(ISceneObject *item) {
     }
     if (!current_item_) {
         clear();
+        updating_ = false;
         return;
     }
+    // Update type and name
+    QString type = current_item_->type_name();
+    type[0] = type[0].toUpper(); // capitalize first letter
+    type_label_->setText(QString("Type: %1").arg(type));
+    name_edit_->setText(name);
+
     // Create new content from item
     content_widget_ = current_item_->create_properties_widget(this);
     if (content_widget_) {
-        layout_->insertWidget(1, content_widget_);
+        layout_->insertWidget(2, content_widget_);
     }
+
+    updating_ = false;
+}
+
+void PropertiesBar::update_name(const QString &name) {
+    if (!current_item_) {
+        return;
+    }
+    updating_ = true;
+    name_edit_->setText(name);
+    updating_ = false;
 }
 
 void PropertiesBar::clear() {
     current_item_ = nullptr;
+    updating_ = true;
+    name_edit_->clear();
+    type_label_->setText("Type: ");
     if (content_widget_) {
         layout_->removeWidget(content_widget_);
         content_widget_->deleteLater();
         content_widget_ = nullptr;
     }
+    updating_ = false;
 }

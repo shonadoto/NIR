@@ -15,6 +15,7 @@ set(SOURCES
     scene/items/EllipseItem.cpp
     scene/items/CircleItem.cpp
     scene/items/StickItem.cpp
+    serialization/ProjectSerializer.cpp
     )
 
 set(HEADERS
@@ -34,6 +35,7 @@ set(HEADERS
     scene/items/EllipseItem.h
     scene/items/CircleItem.h
     scene/items/StickItem.h
+    serialization/ProjectSerializer.h
     )
 
 add_executable(NIRMaterialEditor

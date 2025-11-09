@@ -6,6 +6,7 @@
 #include <QGraphicsScene>
 
 #include "ui/editor/SubstrateItem.h"
+#include "scene/ISceneObject.h"
 
 ObjectTreeModel::ObjectTreeModel(QObject *parent)
     : QAbstractItemModel(parent) {}
@@ -54,9 +55,9 @@ QVariant ObjectTreeModel::data(const QModelIndex &idx, int role) const {
     if (!idx.isValid() || idx.column() != 0) return {};
     if (role == Qt::DisplayRole) {
         auto *item = static_cast<QGraphicsItem*>(idx.internalPointer());
-        if (item == substrate_) return QStringLiteral("Substrate");
-        const auto it = names_.find(item);
-        if (it != names_.end()) return it.value();
+        if (auto *sceneObj = dynamic_cast<ISceneObject*>(item)) {
+            return sceneObj->name();
+        }
         return QStringLiteral("Item");
     }
     return {};
@@ -97,13 +98,36 @@ void ObjectTreeModel::add_item(QGraphicsItem *item, const QString &name) {
     endInsertRows();
 }
 
+QString ObjectTreeModel::get_item_name(QGraphicsItem *item) const {
+    if (auto *sceneObj = dynamic_cast<ISceneObject*>(item)) {
+        return sceneObj->name();
+    }
+    return QStringLiteral("Item");
+}
+
+void ObjectTreeModel::clear_items() {
+    if (items_.isEmpty()) {
+        return;
+    }
+    int first = substrate_ ? 1 : 0;
+    int last = first + items_.size() - 1;
+    beginRemoveRows({}, first, last);
+    items_.clear();
+    names_.clear();
+    endRemoveRows();
+}
+
 bool ObjectTreeModel::setData(const QModelIndex &index, const QVariant &value, int role) {
     if (!index.isValid() || role != Qt::EditRole) return false;
     auto *item = item_from_index(index);
     if (!item) return false;
-    names_[item] = value.toString();
-    emit dataChanged(index, index, {Qt::DisplayRole});
-    return true;
+
+    if (auto *sceneObj = dynamic_cast<ISceneObject*>(item)) {
+        sceneObj->set_name(value.toString());
+        emit dataChanged(index, index, {Qt::DisplayRole});
+        return true;
+    }
+    return false;
 }
 
 bool ObjectTreeModel::removeRows(int row, int count, const QModelIndex &parent) {

@@ -7,6 +7,8 @@
 #include <QFormLayout>
 #include <QPen>
 #include <QPushButton>
+#include <QJsonObject>
+#include <QJsonArray>
 
 namespace {
 constexpr double kMinRadiusPx = 1.0;
@@ -62,5 +64,39 @@ QWidget* CircleItem::create_properties_widget(QWidget *parent) {
     form->addRow("Color:", colorBtn);
 
     return widget;
+}
+
+QJsonObject CircleItem::to_json() const {
+    QJsonObject obj;
+    obj["type"] = type_name();
+    obj["name"] = name_;
+    obj["position"] = QJsonArray{pos().x(), pos().y()};
+    obj["rotation"] = rotation();
+    obj["radius"] = rect().width() / 2.0;
+    QColor c = brush().color();
+    obj["fill_color"] = QJsonArray{c.red(), c.green(), c.blue(), c.alpha()};
+    return obj;
+}
+
+void CircleItem::from_json(const QJsonObject &json) {
+    if (json.contains("name")) {
+        name_ = json["name"].toString();
+    }
+    if (json.contains("position")) {
+        QJsonArray p = json["position"].toArray();
+        setPos(p[0].toDouble(), p[1].toDouble());
+    }
+    if (json.contains("rotation")) {
+        setRotation(json["rotation"].toDouble());
+    }
+    if (json.contains("radius")) {
+        qreal r = json["radius"].toDouble();
+        setRect(QRectF(-r, -r, 2*r, 2*r));
+        setTransformOriginPoint(boundingRect().center());
+    }
+    if (json.contains("fill_color")) {
+        QJsonArray c = json["fill_color"].toArray();
+        setBrush(QBrush(QColor(c[0].toInt(), c[1].toInt(), c[2].toInt(), c[3].toInt())));
+    }
 }
 

@@ -20,6 +20,14 @@
 #include "scene/items/EllipseItem.h"
 #include "scene/items/CircleItem.h"
 #include "scene/items/StickItem.h"
+#include "serialization/ProjectSerializer.h"
+#include <QFileDialog>
+#include <QKeySequence>
+#include <QMenuBar>
+#include <QStatusBar>
+#include <QDir>
+#include <QSettings>
+#include <QFileInfo>
 
 namespace {
 constexpr int kDefaultObjectsBarWidthPx = 280;
@@ -30,12 +38,51 @@ MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent) {
   setWindowIcon(QIcon(":/icons/app.svg"));
 
   createActivityObjectsBarAndEditor();
+  createMenuBar();
   createActionsAndToolbar();
 
   resize(1200, 800);
 }
 
-MainWindow::~MainWindow() = default;
+MainWindow::~MainWindow() {
+    // Ensure properties bar clears before scene/items are destroyed
+    if (properties_bar_) {
+        properties_bar_->clear();
+    }
+}
+
+void MainWindow::createMenuBar() {
+  auto *fileMenu = menuBar()->addMenu("File");
+
+  auto *newAction = new QAction("New", this);
+  newAction->setShortcut(QKeySequence::New);
+  connect(newAction, &QAction::triggered, this, &MainWindow::new_project);
+  fileMenu->addAction(newAction);
+
+  fileMenu->addSeparator();
+
+  auto *saveAction = new QAction("Save", this);
+  saveAction->setShortcut(QKeySequence::Save);
+  connect(saveAction, &QAction::triggered, this, &MainWindow::save_project);
+  fileMenu->addAction(saveAction);
+
+  auto *saveAsAction = new QAction("Save As...", this);
+  saveAsAction->setShortcut(QKeySequence::SaveAs);
+  connect(saveAsAction, &QAction::triggered, this, &MainWindow::save_project_as);
+  fileMenu->addAction(saveAsAction);
+
+  auto *openAction = new QAction("Open...", this);
+  openAction->setShortcut(QKeySequence::Open);
+  connect(openAction, &QAction::triggered, this, &MainWindow::open_project);
+  fileMenu->addAction(openAction);
+
+  fileMenu->addSeparator();
+
+  auto *quitAction = new QAction("Quit", this);
+  quitAction->setShortcut(QKeySequence::Quit);
+  connect(quitAction, &QAction::triggered, this, &QMainWindow::close);
+  fileMenu->addAction(quitAction);
+}
 
 void MainWindow::createActionsAndToolbar() {
   auto *toolbar = addToolBar("Tools");
@@ -74,7 +121,7 @@ void MainWindow::createActionsAndToolbar() {
     rect->setPos(c);
     if (auto *objectsBar = side_bar_widget_->findChild<ObjectsBar*>()) {
       if (auto *model = qobject_cast<ObjectTreeModel*>(objectsBar->treeView()->model())) {
-        model->add_item(rect, "Rectangle");
+        model->add_item(rect, rect->name());
       }
     }
   });
@@ -91,7 +138,7 @@ void MainWindow::createActionsAndToolbar() {
     ellipse->setPos(c);
     if (auto *objectsBar = side_bar_widget_->findChild<ObjectsBar*>()) {
       if (auto *model = qobject_cast<ObjectTreeModel*>(objectsBar->treeView()->model())) {
-        model->add_item(ellipse, "Ellipse");
+        model->add_item(ellipse, ellipse->name());
       }
     }
   });
@@ -108,7 +155,7 @@ void MainWindow::createActionsAndToolbar() {
     circle->setPos(c);
     if (auto *objectsBar = side_bar_widget_->findChild<ObjectsBar*>()) {
       if (auto *model = qobject_cast<ObjectTreeModel*>(objectsBar->treeView()->model())) {
-        model->add_item(circle, "Circle");
+        model->add_item(circle, circle->name());
       }
     }
   });
@@ -125,7 +172,7 @@ void MainWindow::createActionsAndToolbar() {
     stick->setPos(c);
     if (auto *objectsBar = side_bar_widget_->findChild<ObjectsBar*>()) {
       if (auto *model = qobject_cast<ObjectTreeModel*>(objectsBar->treeView()->model())) {
-        model->add_item(stick, "Stick");
+        model->add_item(stick, stick->name());
       }
     }
   });
@@ -151,7 +198,7 @@ void MainWindow::createActivityObjectsBarAndEditor() {
 
   editor_area_ = new EditorArea(rightSplitter);
   properties_bar_ = new PropertiesBar(rightSplitter);
-  properties_bar_->setVisible(false); // hidden until selection
+  // Always visible, show substrate by default
 
   rightSplitter->addWidget(editor_area_);
   rightSplitter->addWidget(properties_bar_);
@@ -159,21 +206,50 @@ void MainWindow::createActivityObjectsBarAndEditor() {
   rightSplitter->setStretchFactor(1, 0);
 
   // Object tree model (root + substrate)
-  auto *treeModel = new ObjectTreeModel(this);
-  treeModel->set_substrate(editor_area_->substrate_item());
+  tree_model_ = new ObjectTreeModel(this);
+  tree_model_->set_substrate(editor_area_->substrate_item());
+
+  // Show substrate properties by default
+  if (auto *substrate = editor_area_->substrate_item()) {
+    properties_bar_->set_selected_item(substrate, "Substrate");
+  }
+
+  // Connect PropertiesBar name change to model update
+  connect(properties_bar_, &PropertiesBar::name_changed, this, [this](const QString &new_name){
+    if (!tree_model_) return;
+    auto *scene = editor_area_->scene();
+    if (!scene) return;
+    auto items = scene->selectedItems();
+    if (items.isEmpty()) return;
+    QModelIndex idx = tree_model_->index_from_item(items.first());
+    if (idx.isValid()) {
+      tree_model_->setData(idx, new_name, Qt::EditRole);
+    }
+  });
   // Bind model to the Objects bar (first sidebar entry)
   // We know SideBarWidget registered the "objects" page as index 0
   // so we can safely find the first page's widget and cast to ObjectsBar
   // Alternatively SideBarWidget could expose a getter; for now we search children
+  // Connect model dataChanged to PropertiesBar update
+  connect(tree_model_, &QAbstractItemModel::dataChanged, this, [this](const QModelIndex &topLeft, const QModelIndex &, const QVector<int> &roles){
+    if (roles.contains(Qt::DisplayRole) || roles.isEmpty()) {
+      auto *item = tree_model_->item_from_index(topLeft);
+      if (item && item == current_selected_item_) {
+        QString name = tree_model_->get_item_name(item);
+        properties_bar_->update_name(name);
+      }
+    }
+  });
+
   if (auto *objectsBar = side_bar_widget_->findChild<ObjectsBar*>()) {
-    objectsBar->set_model(treeModel);
+    objectsBar->set_model(tree_model_);
     auto *treeView = objectsBar->treeView();
     if (treeView) {
       // Tree -> Scene selection
       connect(treeView->selectionModel(), &QItemSelectionModel::currentChanged, this,
-              [this, treeModel](const QModelIndex &current, const QModelIndex &){
+              [this](const QModelIndex &current, const QModelIndex &){
                 if (!editor_area_) return;
-                auto *item = treeModel->item_from_index(current);
+                auto *item = tree_model_->item_from_index(current);
                 if (!item) return;
                 auto *scene = editor_area_->scene();
                 if (!scene) return;
@@ -182,31 +258,33 @@ void MainWindow::createActivityObjectsBarAndEditor() {
                 // Update properties bar
                 if (properties_bar_) {
                   if (auto *sceneObj = dynamic_cast<ISceneObject*>(item)) {
-                    properties_bar_->set_selected_item(sceneObj);
-                    properties_bar_->setVisible(true);
+                    current_selected_item_ = item;
+                    QString name = tree_model_->get_item_name(item);
+                    properties_bar_->set_selected_item(sceneObj, name);
                   }
                 }
               });
       // Scene -> Tree selection
       if (auto *scene = editor_area_->scene()) {
-        connect(scene, &QGraphicsScene::selectionChanged, this, [this, treeModel, treeView]{
+        connect(scene, &QGraphicsScene::selectionChanged, this, [this, treeView]{
           auto items = editor_area_->scene()->selectedItems();
           if (items.isEmpty()) {
-            if (properties_bar_) {
-              properties_bar_->clear();
-              properties_bar_->setVisible(false);
+            // Show substrate when nothing selected
+            if (properties_bar_ && editor_area_->substrate_item()) {
+              properties_bar_->set_selected_item(editor_area_->substrate_item(), "Substrate");
             }
             return;
           }
-          QModelIndex idx = treeModel->index_from_item(items.first());
+          QModelIndex idx = tree_model_->index_from_item(items.first());
           if (idx.isValid()) {
             treeView->selectionModel()->setCurrentIndex(idx, QItemSelectionModel::ClearAndSelect);
           }
           // Update properties bar
           if (properties_bar_) {
             if (auto *sceneObj = dynamic_cast<ISceneObject*>(items.first())) {
-              properties_bar_->set_selected_item(sceneObj);
-              properties_bar_->setVisible(true);
+              current_selected_item_ = items.first();
+              QString name = tree_model_->get_item_name(items.first());
+              properties_bar_->set_selected_item(sceneObj, name);
             }
           }
         });
@@ -225,5 +303,104 @@ void MainWindow::createActivityObjectsBarAndEditor() {
   splitter->setSizes(sizes);
 
   setCentralWidget(splitter);
+}
+
+void MainWindow::new_project() {
+  // Clear all objects except substrate
+  if (!editor_area_) {
+    return;
+  }
+  auto *scene = editor_area_->scene();
+  if (!scene) {
+    return;
+  }
+
+  QList<QGraphicsItem*> toRemove;
+  for (QGraphicsItem *item : scene->items()) {
+    if (dynamic_cast<SubstrateItem*>(item) == nullptr) {
+      toRemove.append(item);
+    }
+  }
+  for (auto *item : toRemove) {
+    scene->removeItem(item);
+    delete item;
+  }
+
+  // Reset substrate to default
+  if (auto *substrate = editor_area_->substrate_item()) {
+    substrate->set_size(QSizeF(1000, 1000));
+    substrate->set_fill_color(QColor(240, 240, 240));
+  }
+
+  // Clear model (will rebuild with substrate only)
+  if (tree_model_) {
+    tree_model_->set_substrate(editor_area_->substrate_item());
+  }
+
+  // Clear current file
+  current_file_path_.clear();
+  statusBar()->showMessage("New project created", 3000);
+}
+
+void MainWindow::save_project() {
+  if (current_file_path_.isEmpty()) {
+    save_project_as();
+    return;
+  }
+
+  if (ProjectSerializer::save_to_file(current_file_path_, editor_area_, tree_model_)) {
+    statusBar()->showMessage("Project saved successfully", 3000);
+  } else {
+    statusBar()->showMessage("Failed to save project", 3000);
+  }
+}
+
+void MainWindow::save_project_as() {
+  QSettings settings("NIR", "MaterialEditor");
+  QString lastDir = settings.value("lastDirectory", QDir::homePath()).toString();
+  QString defaultPath = lastDir + "/untitled.json";
+
+  QString filename = QFileDialog::getSaveFileName(
+      this,
+      "Save Project As",
+      defaultPath,
+      "JSON Files (*.json)",
+      nullptr,
+      QFileDialog::DontUseNativeDialog);
+  if (filename.isEmpty()) {
+    return;
+  }
+
+  if (ProjectSerializer::save_to_file(filename, editor_area_, tree_model_)) {
+    current_file_path_ = filename;
+    settings.setValue("lastDirectory", QFileInfo(filename).absolutePath());
+    statusBar()->showMessage("Project saved successfully", 3000);
+  } else {
+    statusBar()->showMessage("Failed to save project", 3000);
+  }
+}
+
+void MainWindow::open_project() {
+  QSettings settings("NIR", "MaterialEditor");
+  QString lastDir = settings.value("lastDirectory", QDir::homePath()).toString();
+
+  QString filename = QFileDialog::getOpenFileName(
+      this,
+      "Open Project",
+      lastDir,
+      "JSON Files (*.json)",
+      nullptr,
+      QFileDialog::DontUseNativeDialog);
+  if (filename.isEmpty()) {
+    return;
+  }
+
+  if (ProjectSerializer::load_from_file(filename, editor_area_, tree_model_)) {
+    current_file_path_ = filename;
+    settings.setValue("lastDirectory", QFileInfo(filename).absolutePath());
+    statusBar()->showMessage("Project loaded successfully", 3000);
+  } else {
+    statusBar()->showMessage("Failed to load project", 3000);
+  }
 }
 

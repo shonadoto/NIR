@@ -18,10 +18,16 @@ public:
 
     // ISceneObject interface
     QWidget* create_properties_widget(QWidget *parent) override;
+    QJsonObject to_json() const override;
+    void from_json(const QJsonObject &json) override;
+    QString type_name() const override { return QStringLiteral("substrate"); }
+    QString name() const override { return name_; }
+    void set_name(const QString &name) override { name_ = name; }
 
 private:
     QSizeF size_;
     QColor fill_color_ {240, 240, 240};
+    QString name_ {"Substrate"};
 };
 
 
