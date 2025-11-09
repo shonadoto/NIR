@@ -13,13 +13,13 @@
 #include "ui/sidebar/SideBarWidget.h"
 #include "ui/editor/SubstrateDialog.h"
 #include "ui/editor/SubstrateItem.h"
+#include "ui/panels/PropertiesBar.h"
 #include "model/ObjectTreeModel.h"
-#include <QGraphicsRectItem>
-#include <QGraphicsEllipseItem>
-#include <QGraphicsLineItem>
-#include <QBrush>
-#include <QPen>
-#include <QColor>
+#include "scene/ISceneObject.h"
+#include "scene/items/RectangleItem.h"
+#include "scene/items/EllipseItem.h"
+#include "scene/items/CircleItem.h"
+#include "scene/items/StickItem.h"
 
 namespace {
 constexpr int kDefaultObjectsBarWidthPx = 280;
@@ -69,10 +69,7 @@ void MainWindow::createActionsAndToolbar() {
     auto *scene = editor_area_->scene();
     if (!scene) return;
     const QPointF c = editor_area_->substrate_center();
-    auto *rect = new QGraphicsRectItem(QRectF(-50, -30, 100, 60));
-    rect->setFlags(QGraphicsItem::ItemIsSelectable | QGraphicsItem::ItemIsMovable | QGraphicsItem::ItemSendsGeometryChanges);
-    rect->setPen(QPen(Qt::black, 1.0));
-    rect->setBrush(QBrush(QColor(128, 128, 128, 128))); // semi-transparent gray
+    auto *rect = new RectangleItem(QRectF(-50, -30, 100, 60));
     scene->addItem(rect);
     rect->setPos(c);
     if (auto *objectsBar = side_bar_widget_->findChild<ObjectsBar*>()) {
@@ -89,10 +86,7 @@ void MainWindow::createActionsAndToolbar() {
     auto *scene = editor_area_->scene();
     if (!scene) return;
     const QPointF c = editor_area_->substrate_center();
-    auto *ellipse = new QGraphicsEllipseItem(QRectF(-50, -30, 100, 60));
-    ellipse->setFlags(QGraphicsItem::ItemIsSelectable | QGraphicsItem::ItemIsMovable | QGraphicsItem::ItemSendsGeometryChanges);
-    ellipse->setPen(QPen(Qt::black, 1.0));
-    ellipse->setBrush(QBrush(QColor(128, 128, 128, 128))); // semi-transparent gray
+    auto *ellipse = new EllipseItem(QRectF(-50, -30, 100, 60));
     scene->addItem(ellipse);
     ellipse->setPos(c);
     if (auto *objectsBar = side_bar_widget_->findChild<ObjectsBar*>()) {
@@ -109,10 +103,7 @@ void MainWindow::createActionsAndToolbar() {
     auto *scene = editor_area_->scene();
     if (!scene) return;
     const QPointF c = editor_area_->substrate_center();
-    auto *circle = new QGraphicsEllipseItem(QRectF(-40, -40, 80, 80));
-    circle->setFlags(QGraphicsItem::ItemIsSelectable | QGraphicsItem::ItemIsMovable | QGraphicsItem::ItemSendsGeometryChanges);
-    circle->setPen(QPen(Qt::black, 1.0));
-    circle->setBrush(QBrush(QColor(128, 128, 128, 128))); // semi-transparent gray
+    auto *circle = new CircleItem(40);
     scene->addItem(circle);
     circle->setPos(c);
     if (auto *objectsBar = side_bar_widget_->findChild<ObjectsBar*>()) {
@@ -129,11 +120,7 @@ void MainWindow::createActionsAndToolbar() {
     auto *scene = editor_area_->scene();
     if (!scene) return;
     const QPointF c = editor_area_->substrate_center();
-    auto *stick = new QGraphicsLineItem(QLineF(-50, 0, 50, 0));
-    stick->setFlags(QGraphicsItem::ItemIsSelectable | QGraphicsItem::ItemIsMovable | QGraphicsItem::ItemSendsGeometryChanges);
-    QPen pen(Qt::black);
-    pen.setWidthF(2.0);
-    stick->setPen(pen);
+    auto *stick = new StickItem(QLineF(-50, 0, 50, 0));
     scene->addItem(stick);
     stick->setPos(c);
     if (auto *objectsBar = side_bar_widget_->findChild<ObjectsBar*>()) {
@@ -157,8 +144,19 @@ void MainWindow::createActivityObjectsBarAndEditor() {
       "objects", QIcon(":/icons/objects.svg"),
       new ObjectsBar(side_bar_widget_), kDefaultObjectsBarWidthPx);
 
-  // Right: Editor area
-  editor_area_ = new EditorArea(splitter);
+  // Middle/Right: Editor area + Properties bar
+  auto *rightSplitter = new QSplitter(Qt::Horizontal, splitter);
+  rightSplitter->setChildrenCollapsible(false);
+  rightSplitter->setHandleWidth(1);
+
+  editor_area_ = new EditorArea(rightSplitter);
+  properties_bar_ = new PropertiesBar(rightSplitter);
+  properties_bar_->setVisible(false); // hidden until selection
+
+  rightSplitter->addWidget(editor_area_);
+  rightSplitter->addWidget(properties_bar_);
+  rightSplitter->setStretchFactor(0, 1);
+  rightSplitter->setStretchFactor(1, 0);
 
   // Object tree model (root + substrate)
   auto *treeModel = new ObjectTreeModel(this);
@@ -181,24 +179,44 @@ void MainWindow::createActivityObjectsBarAndEditor() {
                 if (!scene) return;
                 scene->clearSelection();
                 item->setSelected(true);
+                // Update properties bar
+                if (properties_bar_) {
+                  if (auto *sceneObj = dynamic_cast<ISceneObject*>(item)) {
+                    properties_bar_->set_selected_item(sceneObj);
+                    properties_bar_->setVisible(true);
+                  }
+                }
               });
       // Scene -> Tree selection
       if (auto *scene = editor_area_->scene()) {
         connect(scene, &QGraphicsScene::selectionChanged, this, [this, treeModel, treeView]{
           auto items = editor_area_->scene()->selectedItems();
-          if (items.isEmpty()) return;
+          if (items.isEmpty()) {
+            if (properties_bar_) {
+              properties_bar_->clear();
+              properties_bar_->setVisible(false);
+            }
+            return;
+          }
           QModelIndex idx = treeModel->index_from_item(items.first());
           if (idx.isValid()) {
             treeView->selectionModel()->setCurrentIndex(idx, QItemSelectionModel::ClearAndSelect);
+          }
+          // Update properties bar
+          if (properties_bar_) {
+            if (auto *sceneObj = dynamic_cast<ISceneObject*>(items.first())) {
+              properties_bar_->set_selected_item(sceneObj);
+              properties_bar_->setVisible(true);
+            }
           }
         });
       }
     }
   }
 
-  // Put into splitter
+  // Put into main splitter
   splitter->addWidget(side_bar_widget_);
-  splitter->addWidget(editor_area_);
+  splitter->addWidget(rightSplitter);
   splitter->setStretchFactor(0, 0);
   splitter->setStretchFactor(1, 1);
 

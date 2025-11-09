@@ -1,6 +1,9 @@
 #include "SubstrateItem.h"
 
 #include <QPainter>
+#include <QFormLayout>
+#include <QPushButton>
+#include <QColorDialog>
 
 namespace {
 constexpr qreal kOutlineWidthPx = 1.0;
@@ -23,7 +26,7 @@ void SubstrateItem::paint(QPainter *painter, const QStyleOptionGraphicsItem *, Q
                                                 -kOutlineWidthPx, -kOutlineWidthPx);
 
     // Fill
-    painter->fillRect(rect, QColor(240, 240, 240));
+    painter->fillRect(rect, fill_color_);
 
     // Outline
     QPen pen(QColor(180, 180, 180));
@@ -38,6 +41,29 @@ void SubstrateItem::set_size(const QSizeF &size) {
     }
     prepareGeometryChange();
     size_ = size;
+}
+
+void SubstrateItem::set_fill_color(const QColor &color) {
+    fill_color_ = color;
+    update();
+}
+
+QWidget* SubstrateItem::create_properties_widget(QWidget *parent) {
+    auto *widget = new QWidget(parent);
+    auto *form = new QFormLayout(widget);
+    form->setContentsMargins(0, 0, 0, 0);
+
+    auto *colorBtn = new QPushButton("Choose Color", widget);
+    QObject::connect(colorBtn, &QPushButton::clicked, widget, [this, colorBtn]{
+        QColor c = QColorDialog::getColor(fill_color_, colorBtn, "Choose Substrate Color");
+        if (c.isValid()) {
+            set_fill_color(c);
+        }
+    });
+
+    form->addRow("Color:", colorBtn);
+
+    return widget;
 }
 
 

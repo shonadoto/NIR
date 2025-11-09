@@ -8,6 +8,7 @@ class QWidget;
 class SideBarWidget;
 class ObjectsBar;
 class EditorArea;
+class PropertiesBar;
 
 class MainWindow : public QMainWindow {
     Q_OBJECT
@@ -23,4 +24,5 @@ private:
 private:
     SideBarWidget *side_bar_widget_ {nullptr};
     EditorArea *editor_area_ {nullptr};
+    PropertiesBar *properties_bar_ {nullptr};
 };

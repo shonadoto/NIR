@@ -5,11 +5,16 @@ set(SOURCES
     ui/activity/ActivityBar.cpp
     ui/activity/ActivityButton.cpp
     ui/panels/ObjectsBar.cpp
+    ui/panels/PropertiesBar.cpp
     ui/editor/EditorArea.cpp
     ui/editor/SubstrateItem.cpp
     ui/editor/SubstrateDialog.cpp
     ui/sidebar/SideBarWidget.cpp
     model/ObjectTreeModel.cpp
+    scene/items/RectangleItem.cpp
+    scene/items/EllipseItem.cpp
+    scene/items/CircleItem.cpp
+    scene/items/StickItem.cpp
     )
 
 set(HEADERS
@@ -18,11 +23,17 @@ set(HEADERS
     ui/activity/ActivityBar.h
     ui/activity/ActivityButton.h
     ui/panels/ObjectsBar.h
+    ui/panels/PropertiesBar.h
     ui/editor/EditorArea.h
     ui/editor/SubstrateItem.h
     ui/editor/SubstrateDialog.h
     ui/sidebar/SideBarWidget.h
     model/ObjectTreeModel.h
+    scene/ISceneObject.h
+    scene/items/RectangleItem.h
+    scene/items/EllipseItem.h
+    scene/items/CircleItem.h
+    scene/items/StickItem.h
     )
 
 add_executable(NIRMaterialEditor
