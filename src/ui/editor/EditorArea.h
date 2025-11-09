@@ -16,6 +16,9 @@ public:
     void fit_to_substrate();
     void set_substrate_size(const QSizeF &size);
     QSizeF substrate_size() const;
+    SubstrateItem* substrate_item() const { return substrate_; }
+    QGraphicsScene* scene() const { return scene_; }
+    QPointF substrate_center() const;
 
 private:
     void init_scene();

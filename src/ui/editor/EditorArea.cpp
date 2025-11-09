@@ -58,6 +58,13 @@ QSizeF EditorArea::substrate_size() const {
     return substrate_->size();
 }
 
+QPointF EditorArea::substrate_center() const {
+    if (substrate_ == nullptr) {
+        return QPointF(0, 0);
+    }
+    return substrate_->sceneBoundingRect().center();
+}
+
 void EditorArea::showEvent(QShowEvent *event) {
     QWidget::showEvent(event);
     if (!fitted_once_) {

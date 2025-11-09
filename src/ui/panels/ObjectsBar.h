@@ -1,6 +1,7 @@
 #pragma once
 
 #include <QWidget>
+#include <QAbstractItemModel>
 
 class QTreeView;
 
@@ -13,6 +14,10 @@ public:
     QTreeView* treeView() const { return tree_view_; }
     int preferredWidth() const { return preferred_width_; }
     void setPreferredWidth(int w);
+    void set_model(QAbstractItemModel *model);
+
+private:
+    bool eventFilter(QObject *obj, QEvent *event) override;
 
 public slots:
     void setActive(bool visible) { setVisible(visible); }
