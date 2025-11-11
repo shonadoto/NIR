@@ -216,12 +216,8 @@ void MainWindow::createActivityObjectsBarAndEditor() {
 
   // Connect PropertiesBar name change to model update
   connect(properties_bar_, &PropertiesBar::name_changed, this, [this](const QString &new_name){
-    if (!tree_model_) return;
-    auto *scene = editor_area_->scene();
-    if (!scene) return;
-    auto items = scene->selectedItems();
-    if (items.isEmpty()) return;
-    QModelIndex idx = tree_model_->index_from_item(items.first());
+    if (!tree_model_ || !current_selected_item_) return;
+    QModelIndex idx = tree_model_->index_from_item(current_selected_item_);
     if (idx.isValid()) {
       tree_model_->setData(idx, new_name, Qt::EditRole);
     }
@@ -315,6 +311,11 @@ void MainWindow::new_project() {
     return;
   }
 
+  // Clear model first
+  if (tree_model_) {
+    tree_model_->clear_items();
+  }
+
   QList<QGraphicsItem*> toRemove;
   for (QGraphicsItem *item : scene->items()) {
     if (dynamic_cast<SubstrateItem*>(item) == nullptr) {
@@ -330,15 +331,23 @@ void MainWindow::new_project() {
   if (auto *substrate = editor_area_->substrate_item()) {
     substrate->set_size(QSizeF(1000, 1000));
     substrate->set_fill_color(QColor(240, 240, 240));
+    substrate->set_name("Substrate");
   }
 
-  // Clear model (will rebuild with substrate only)
+  // Rebuild model with substrate
   if (tree_model_) {
     tree_model_->set_substrate(editor_area_->substrate_item());
   }
 
-  // Clear current file
+  // Clear current file and selection
   current_file_path_.clear();
+  current_selected_item_ = nullptr;
+
+  // Show substrate in properties
+  if (properties_bar_ && editor_area_->substrate_item()) {
+    properties_bar_->set_selected_item(editor_area_->substrate_item(), "Substrate");
+  }
+
   statusBar()->showMessage("New project created", 3000);
 }
 
