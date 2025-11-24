@@ -28,6 +28,13 @@ RectangleItem::RectangleItem(const QRectF &rect, QGraphicsItem *parent)
     setTransformOriginPoint(boundingRect().center());
 }
 
+void RectangleItem::set_name(const QString &name) {
+    QString trimmed = name.trimmed();
+    if (!trimmed.isEmpty()) {
+        name_ = trimmed;
+    }
+}
+
 QWidget* RectangleItem::create_properties_widget(QWidget *parent) {
     auto *widget = new QWidget(parent);
     auto *form = new QFormLayout(widget);

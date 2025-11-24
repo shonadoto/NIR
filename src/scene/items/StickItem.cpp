@@ -26,6 +26,13 @@ StickItem::StickItem(const QLineF &line, QGraphicsItem *parent)
     setTransformOriginPoint(boundingRect().center());
 }
 
+void StickItem::set_name(const QString &name) {
+    QString trimmed = name.trimmed();
+    if (!trimmed.isEmpty()) {
+        name_ = trimmed;
+    }
+}
+
 QWidget* StickItem::create_properties_widget(QWidget *parent) {
     auto *widget = new QWidget(parent);
     auto *form = new QFormLayout(widget);

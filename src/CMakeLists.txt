@@ -11,6 +11,7 @@ set(SOURCES
     ui/editor/SubstrateDialog.cpp
     ui/sidebar/SideBarWidget.cpp
     model/ObjectTreeModel.cpp
+    model/MaterialPreset.cpp
     scene/items/RectangleItem.cpp
     scene/items/EllipseItem.cpp
     scene/items/CircleItem.cpp
@@ -30,6 +31,7 @@ set(HEADERS
     ui/editor/SubstrateDialog.h
     ui/sidebar/SideBarWidget.h
     model/ObjectTreeModel.h
+    model/MaterialPreset.h
     scene/ISceneObject.h
     scene/items/RectangleItem.h
     scene/items/EllipseItem.h

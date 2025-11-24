@@ -8,6 +8,7 @@
 #include "utils/Logging.h"
 
 #include "model/ObjectTreeModel.h"
+#include "model/MaterialPreset.h"
 #include "scene/ISceneObject.h"
 #include "scene/items/CircleItem.h"
 #include "scene/items/EllipseItem.h"
@@ -32,7 +33,7 @@ bool ProjectSerializer::save_to_file(const QString &filename, EditorArea *editor
         root["substrate"] = substrate->to_json();
     }
 
-    // Serialize objects
+    // Serialize objects (inclusions)
     QJsonArray objects;
     auto *scene = editor_area->scene();
     if (scene) {
@@ -48,6 +49,13 @@ bool ProjectSerializer::save_to_file(const QString &filename, EditorArea *editor
         }
     }
     root["objects"] = objects;
+
+    // Serialize material presets
+    QJsonArray presets;
+    for (auto *preset : model->get_presets()) {
+        presets.append(preset->to_json());
+    }
+    root["material_presets"] = presets;
 
     QJsonDocument doc(root);
     QFile file(filename);
@@ -94,8 +102,9 @@ bool ProjectSerializer::load_from_file(const QString &filename, EditorArea *edit
         return false;
     }
 
-    // Clear model items first (will trigger tree updates)
+    // Clear model items and presets first (will trigger tree updates)
     model->clear_items();
+    model->clear_presets();
 
     QList<QGraphicsItem*> toRemove;
     for (QGraphicsItem *item : scene->items()) {
@@ -122,35 +131,58 @@ bool ProjectSerializer::load_from_file(const QString &filename, EditorArea *edit
         for (const QJsonValue &val : objects) {
             QJsonObject obj = val.toObject();
             QString type = obj["type"].toString();
-            ISceneObject *newItem = nullptr;
 
             if (type == "rectangle") {
                 auto *rect = new RectangleItem(QRectF(0, 0, 100, 60));
                 rect->from_json(obj);
+                // Ensure name is not empty after loading
+                if (rect->name().trimmed().isEmpty()) {
+                    rect->set_name("Rectangle");
+                }
                 scene->addItem(rect);
-                newItem = rect;
                 model->add_item(rect, rect->name());
             } else if (type == "ellipse") {
                 auto *ellipse = new EllipseItem(QRectF(0, 0, 100, 60));
                 ellipse->from_json(obj);
+                if (ellipse->name().trimmed().isEmpty()) {
+                    ellipse->set_name("Ellipse");
+                }
                 scene->addItem(ellipse);
-                newItem = ellipse;
                 model->add_item(ellipse, ellipse->name());
             } else if (type == "circle") {
                 auto *circle = new CircleItem(40);
                 circle->from_json(obj);
+                if (circle->name().trimmed().isEmpty()) {
+                    circle->set_name("Circle");
+                }
                 scene->addItem(circle);
-                newItem = circle;
                 model->add_item(circle, circle->name());
             } else if (type == "stick") {
                 auto *stick = new StickItem(QLineF(0, 0, 100, 0));
                 stick->from_json(obj);
+                if (stick->name().trimmed().isEmpty()) {
+                    stick->set_name("Stick");
+                }
                 scene->addItem(stick);
-                newItem = stick;
                 model->add_item(stick, stick->name());
             } else {
                 LOG_WARN() << "Unknown object type in project file: " << type.toStdString();
             }
+        }
+    }
+
+    // Restore material presets
+    if (root.contains("material_presets")) {
+        QJsonArray presets = root["material_presets"].toArray();
+        for (const QJsonValue &val : presets) {
+            QJsonObject presetObj = val.toObject();
+            auto *preset = new MaterialPreset();
+            preset->from_json(presetObj);
+            // Ensure name is not empty after loading
+            if (preset->name().trimmed().isEmpty()) {
+                preset->set_name("New Material");
+            }
+            model->add_preset(preset);
         }
     }
 

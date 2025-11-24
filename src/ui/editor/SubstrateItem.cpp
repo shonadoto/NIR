@@ -18,6 +18,13 @@ SubstrateItem::SubstrateItem(const QSizeF &size)
     setZValue(-100.0); // stay behind other shapes later
 }
 
+void SubstrateItem::set_name(const QString &name) {
+    QString trimmed = name.trimmed();
+    if (!trimmed.isEmpty()) {
+        name_ = trimmed;
+    }
+}
+
 QRectF SubstrateItem::boundingRect() const {
     return QRectF(QPointF(0, 0), size_);
 }

@@ -26,6 +26,13 @@ EllipseItem::EllipseItem(const QRectF &rect, QGraphicsItem *parent)
     setTransformOriginPoint(boundingRect().center());
 }
 
+void EllipseItem::set_name(const QString &name) {
+    QString trimmed = name.trimmed();
+    if (!trimmed.isEmpty()) {
+        name_ = trimmed;
+    }
+}
+
 QWidget* EllipseItem::create_properties_widget(QWidget *parent) {
     auto *widget = new QWidget(parent);
     auto *form = new QFormLayout(widget);
