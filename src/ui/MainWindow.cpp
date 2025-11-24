@@ -46,9 +46,13 @@ MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent) {
 
 MainWindow::~MainWindow() {
     // Ensure properties bar clears before scene/items are destroyed
+    // This must happen BEFORE editor_area_ is destroyed, as it contains the scene
     if (properties_bar_) {
         properties_bar_->clear();
+        properties_bar_ = nullptr;
     }
+    // Clear current selection reference
+    current_selected_item_ = nullptr;
 }
 
 void MainWindow::createMenuBar() {
@@ -311,6 +315,12 @@ void MainWindow::new_project() {
     return;
   }
 
+  // Clear properties bar FIRST before deleting items
+  if (properties_bar_) {
+    properties_bar_->clear();
+  }
+  current_selected_item_ = nullptr;
+
   // Clear model first
   if (tree_model_) {
     tree_model_->clear_items();
@@ -403,6 +413,12 @@ void MainWindow::open_project() {
   if (filename.isEmpty()) {
     return;
   }
+
+  // Clear properties bar before loading to avoid accessing deleted items
+  if (properties_bar_) {
+    properties_bar_->clear();
+  }
+  current_selected_item_ = nullptr;
 
   if (ProjectSerializer::load_from_file(filename, editor_area_, tree_model_)) {
     current_file_path_ = filename;

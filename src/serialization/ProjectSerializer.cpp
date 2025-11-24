@@ -5,6 +5,7 @@
 #include <QJsonDocument>
 #include <QJsonObject>
 #include <QGraphicsScene>
+#include "utils/Logging.h"
 
 #include "model/ObjectTreeModel.h"
 #include "scene/ISceneObject.h"
@@ -16,7 +17,10 @@
 #include "ui/editor/SubstrateItem.h"
 
 bool ProjectSerializer::save_to_file(const QString &filename, EditorArea *editor_area, ObjectTreeModel *model) {
+    LOG_INFO() << "Saving project to: " << filename.toStdString();
+
     if (!editor_area || !model) {
+        LOG_ERROR() << "Save failed: editor_area or model is null";
         return false;
     }
 
@@ -48,20 +52,26 @@ bool ProjectSerializer::save_to_file(const QString &filename, EditorArea *editor
     QJsonDocument doc(root);
     QFile file(filename);
     if (!file.open(QIODevice::WriteOnly)) {
+        LOG_ERROR() << "Failed to open file for writing: " << filename.toStdString();
         return false;
     }
     file.write(doc.toJson(QJsonDocument::Indented));
     file.close();
+    LOG_INFO() << "Project saved successfully: " << filename.toStdString();
     return true;
 }
 
 bool ProjectSerializer::load_from_file(const QString &filename, EditorArea *editor_area, ObjectTreeModel *model) {
+    LOG_INFO() << "Loading project from: " << filename.toStdString();
+
     if (!editor_area || !model) {
+        LOG_ERROR() << "Load failed: editor_area or model is null";
         return false;
     }
 
     QFile file(filename);
     if (!file.open(QIODevice::ReadOnly)) {
+        LOG_ERROR() << "Failed to open file for reading: " << filename.toStdString();
         return false;
     }
     QByteArray data = file.readAll();
@@ -138,10 +148,13 @@ bool ProjectSerializer::load_from_file(const QString &filename, EditorArea *edit
                 scene->addItem(stick);
                 newItem = stick;
                 model->add_item(stick, stick->name());
+            } else {
+                LOG_WARN() << "Unknown object type in project file: " << type.toStdString();
             }
         }
     }
 
+    LOG_INFO() << "Project loaded successfully: " << filename.toStdString();
     return true;
 }
 

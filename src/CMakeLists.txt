@@ -36,6 +36,7 @@ set(HEADERS
     scene/items/CircleItem.h
     scene/items/StickItem.h
     serialization/ProjectSerializer.h
+    utils/Logging.h
     )
 
 add_executable(NIRMaterialEditor
@@ -46,7 +47,18 @@ add_executable(NIRMaterialEditor
 
 target_include_directories(NIRMaterialEditor PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
 
-target_link_libraries(NIRMaterialEditor PRIVATE Qt6::Widgets Qt6::Svg)
+target_link_libraries(NIRMaterialEditor PRIVATE Qt6::Widgets Qt6::Svg spdlog::spdlog)
+
+# Add debug flags for better crash diagnostics
+if(CMAKE_BUILD_TYPE STREQUAL "Debug" OR NOT CMAKE_BUILD_TYPE)
+    target_compile_options(NIRMaterialEditor PRIVATE
+        -g                    # Debug symbols
+        -O0                   # No optimization for easier debugging
+        -fno-omit-frame-pointer  # Better stack traces
+        -Wall                 # Enable all warnings
+        -Wextra               # Extra warnings
+    )
+endif()
 
 if (WIN32)
     target_compile_definitions(NIRMaterialEditor PRIVATE -DUNICODE -D_UNICODE)
