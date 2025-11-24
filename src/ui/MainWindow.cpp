@@ -7,6 +7,9 @@
 #include <QToolBar>
 #include <QTreeView>
 #include <QGraphicsScene>
+#include <QLineF>
+#include <QPen>
+#include <algorithm>
 #include <QItemSelectionModel>
 #include "ui/editor/EditorArea.h"
 #include "ui/panels/ObjectsBar.h"
@@ -15,13 +18,19 @@
 #include "ui/editor/SubstrateItem.h"
 #include "ui/panels/PropertiesBar.h"
 #include "model/ObjectTreeModel.h"
-#include "model/MaterialPreset.h"
+#include "model/MaterialModel.h"
+#include "model/ShapeModel.h"
+#include "model/DocumentModel.h"
+#include "model/SubstrateModel.h"
+#include "model/core/ModelTypes.h"
 #include "scene/ISceneObject.h"
 #include "scene/items/RectangleItem.h"
 #include "scene/items/EllipseItem.h"
 #include "scene/items/CircleItem.h"
 #include "scene/items/StickItem.h"
 #include "serialization/ProjectSerializer.h"
+#include "ui/bindings/ShapeModelBinder.h"
+#include "ui/utils/ColorUtils.h"
 #include <QFileDialog>
 #include <QKeySequence>
 #include <QMenuBar>
@@ -38,6 +47,9 @@ MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent) {
   setWindowTitle("NIR Material Editor");
   setWindowIcon(QIcon(":/icons/app.svg"));
 
+  document_model_ = std::make_unique<DocumentModel>();
+  shape_binder_ = std::make_unique<ShapeModelBinder>(*document_model_);
+
   createActivityObjectsBarAndEditor();
   createMenuBar();
   createActionsAndToolbar();
@@ -46,6 +58,9 @@ MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent) {
 }
 
 MainWindow::~MainWindow() {
+    if (tree_model_) {
+        tree_model_->set_document(nullptr);
+    }
     // Ensure properties bar clears before scene/items are destroyed
     // This must happen BEFORE editor_area_ is destroyed, as it contains the scene
     if (properties_bar_) {
@@ -126,6 +141,7 @@ void MainWindow::createActivityObjectsBarAndEditor() {
   side_bar_widget_ = new SideBarWidget(splitter);
   // Register default Objects bar
   auto *objectsBar = new ObjectsBar(side_bar_widget_);
+  objectsBar->set_shape_binder(shape_binder_.get());
   side_bar_widget_->registerSidebar(
       "objects", QIcon(":/icons/objects.svg"),
       objectsBar, kDefaultObjectsBarWidthPx);
@@ -137,6 +153,7 @@ void MainWindow::createActivityObjectsBarAndEditor() {
 
   editor_area_ = new EditorArea(rightSplitter);
   properties_bar_ = new PropertiesBar(rightSplitter);
+  properties_bar_->set_shape_binder(shape_binder_.get());
   // Always visible, show substrate by default
 
   rightSplitter->addWidget(editor_area_);
@@ -146,6 +163,7 @@ void MainWindow::createActivityObjectsBarAndEditor() {
 
   // Object tree model (root + substrate)
   tree_model_ = new ObjectTreeModel(this);
+  tree_model_->set_document(document_model_.get());
   tree_model_->set_substrate(editor_area_->substrate_item());
 
   // Connect ObjectsBar to EditorArea
@@ -164,64 +182,31 @@ void MainWindow::createActivityObjectsBarAndEditor() {
   // Connect PropertiesBar name change to model update
   connect(properties_bar_, &PropertiesBar::name_changed, this, [this](const QString &new_name){
     if (!tree_model_ || !current_selected_item_) return;
-    QModelIndex idx = tree_model_->index_from_item(current_selected_item_);
-    if (idx.isValid()) {
-      tree_model_->setData(idx, new_name, Qt::EditRole);
+    if (shape_binder_ && current_selected_item_) {
+      auto model = shape_binder_->model_for(dynamic_cast<ISceneObject*>(current_selected_item_));
+      if (model) {
+        QModelIndex idx = tree_model_->index_from_shape(model);
+        if (idx.isValid()) {
+          tree_model_->setData(idx, new_name, Qt::EditRole);
+        }
+      }
     }
   });
 
   // Connect PropertiesBar preset name change to model update
-  connect(properties_bar_, &PropertiesBar::preset_name_changed, this, [this](MaterialPreset *preset, const QString &new_name){
-    if (!preset || !tree_model_) return;
-    // set_name already validates and sets the name
-    QModelIndex idx = tree_model_->index_from_preset(preset);
+  connect(properties_bar_, &PropertiesBar::material_name_changed, this, [this](MaterialModel *material, const QString &new_name){
+    if (!material || !tree_model_ || !document_model_) return;
+    std::shared_ptr<MaterialModel> shared;
+    for (const auto &mat : document_model_->materials()) {
+      if (mat.get() == material) {
+        shared = mat;
+        break;
+      }
+    }
+    if (!shared) return;
+    QModelIndex idx = tree_model_->index_from_material(shared);
     if (idx.isValid()) {
       tree_model_->setData(idx, new_name, Qt::EditRole);
-    }
-  });
-
-  // Connect PropertiesBar preset color change
-  connect(properties_bar_, &PropertiesBar::preset_color_changed, this, [this](MaterialPreset *preset, const QColor &color){
-    if (!preset) return;
-    preset->set_fill_color(color);
-    // Update all items using this preset
-    if (editor_area_ && editor_area_->scene()) {
-      // TODO: Update items that use this preset
-    }
-  });
-
-  // Connect PropertiesBar item material change
-  connect(properties_bar_, &PropertiesBar::item_material_changed, this, [this](ISceneObject *item, MaterialPreset *preset){
-    if (!item || !editor_area_) return;
-    auto *graphicsItem = dynamic_cast<QGraphicsItem*>(item);
-    if (!graphicsItem) return;
-
-    QColor color;
-    if (preset) {
-      // Use preset color
-      color = preset->fill_color();
-    } else {
-      // Custom - keep current color, don't change
-      return;
-    }
-
-    // Apply color to item
-    if (auto *rectItem = dynamic_cast<QGraphicsRectItem*>(graphicsItem)) {
-      rectItem->setBrush(QBrush(color));
-      rectItem->update(); // Force repaint
-    } else if (auto *ellipseItem = dynamic_cast<QGraphicsEllipseItem*>(graphicsItem)) {
-      ellipseItem->setBrush(QBrush(color));
-      ellipseItem->update(); // Force repaint
-    } else if (auto *lineItem = dynamic_cast<QGraphicsLineItem*>(graphicsItem)) {
-      QPen pen = lineItem->pen();
-      pen.setColor(color);
-      lineItem->setPen(pen);
-      lineItem->update(); // Force repaint
-    }
-
-    // Update scene to reflect changes
-    if (auto *scene = graphicsItem->scene()) {
-      scene->update(graphicsItem->boundingRect());
     }
   });
 
@@ -234,96 +219,82 @@ void MainWindow::createActivityObjectsBarAndEditor() {
     auto *scene = editor_area_->scene();
     if (!scene) return;
 
-    // Get model index BEFORE any operations that might invalidate it
-    QModelIndex old_idx = tree_model_->index_from_item(old_graphics_item);
-    if (!old_idx.isValid()) return;
-    QModelIndex parent = old_idx.parent();
-    int row = old_idx.row();
+    std::shared_ptr<ShapeModel> shapeModel;
+    if (shape_binder_) {
+      shapeModel = shape_binder_->model_for(old_item);
+    }
+    if (!shapeModel) {
+      return;
+    }
 
-    // Save ALL properties from old item BEFORE deletion
-    QString item_name = old_item->name();
+    auto to_shape_type = [](const QString &type) {
+      if (type == "circle") return ShapeModel::ShapeType::Circle;
+      if (type == "ellipse") return ShapeModel::ShapeType::Ellipse;
+      if (type == "stick") return ShapeModel::ShapeType::Stick;
+      return ShapeModel::ShapeType::Rectangle;
+    };
+
+    ShapeModel::ShapeType targetType = to_shape_type(new_type);
+    if (shapeModel->type() == targetType) {
+      return;
+    }
+    shapeModel->set_type(targetType);
+
     QPointF position = old_graphics_item->pos();
     qreal rotation = old_graphics_item->rotation();
-    QColor fill_color;
+    QString item_name = old_item->name();
+    QSizeF old_size = old_graphics_item->boundingRect().size();
 
-    // Get fill color based on item type
-    if (auto *rectItem = dynamic_cast<QGraphicsRectItem*>(old_graphics_item)) {
-      fill_color = rectItem->brush().color();
-    } else if (auto *ellipseItem = dynamic_cast<QGraphicsEllipseItem*>(old_graphics_item)) {
-      fill_color = ellipseItem->brush().color();
-    } else if (auto *lineItem = dynamic_cast<QGraphicsLineItem*>(old_graphics_item)) {
-      fill_color = lineItem->pen().color();
+    auto update_model_size = [&](ShapeModel::ShapeType type){
+      switch (type) {
+        case ShapeModel::ShapeType::Circle: {
+          double diameter = std::max(old_size.width(), old_size.height());
+          if (diameter < 1.0) diameter = 80.0;
+          shapeModel->set_size(Size2D{diameter, diameter});
+          break;
+        }
+        case ShapeModel::ShapeType::Rectangle:
+        case ShapeModel::ShapeType::Ellipse: {
+          QSizeF sz = old_size;
+          if (sz.width() < 1.0) sz.setWidth(100.0);
+          if (sz.height() < 1.0) sz.setHeight(60.0);
+          shapeModel->set_size(Size2D{sz.width(), sz.height()});
+          break;
+        }
+        case ShapeModel::ShapeType::Stick: {
+          double length = std::max(old_size.width(), old_size.height());
+          if (length < 1.0) length = 100.0;
+          constexpr double kDefaultThickness = 2.0;
+          shapeModel->set_size(Size2D{length, kDefaultThickness});
+          break;
+        }
+      }
+    };
+    update_model_size(targetType);
+
+    std::unique_ptr<ISceneObject> new_item_ptr(create_item_for_shape(shapeModel));
+    if (!new_item_ptr) return;
+    auto *new_item = new_item_ptr.release();
+    auto *new_graphics_item = dynamic_cast<QGraphicsItem*>(new_item);
+    if (!new_graphics_item) {
+      delete new_item;
+      return;
     }
 
-    // Get size/bounds
-    QRectF bounds = old_graphics_item->boundingRect();
-    QSizeF size(bounds.width(), bounds.height());
-
-    // Create new item based on type
-    ISceneObject *new_item = nullptr;
-    QGraphicsItem *new_graphics_item = nullptr;
-
-    if (new_type == "circle") {
-      qreal radius = qMin(size.width(), size.height()) / 2.0;
-      if (radius < 1.0) radius = 40.0;
-      auto *circle = new CircleItem(radius);
-      scene->addItem(circle);
-      new_item = circle;
-      new_graphics_item = circle;
-    } else if (new_type == "rectangle") {
-      if (size.width() < 1.0) size.setWidth(100.0);
-      if (size.height() < 1.0) size.setHeight(60.0);
-      auto *rect = new RectangleItem(QRectF(-size.width()/2, -size.height()/2, size.width(), size.height()));
-      scene->addItem(rect);
-      new_item = rect;
-      new_graphics_item = rect;
-    } else if (new_type == "ellipse") {
-      if (size.width() < 1.0) size.setWidth(100.0);
-      if (size.height() < 1.0) size.setHeight(60.0);
-      auto *ellipse = new EllipseItem(QRectF(-size.width()/2, -size.height()/2, size.width(), size.height()));
-      scene->addItem(ellipse);
-      new_item = ellipse;
-      new_graphics_item = ellipse;
-    } else if (new_type == "stick") {
-      qreal length = qMax(size.width(), size.height());
-      if (length < 1.0) length = 100.0;
-      auto *stick = new StickItem(QLineF(-length/2, 0, length/2, 0));
-      scene->addItem(stick);
-      new_item = stick;
-      new_graphics_item = stick;
-    }
-
-    if (!new_item || !new_graphics_item) return;
-
-    // Apply saved properties to new item
+    new_item->set_name(item_name);
     new_graphics_item->setPos(position);
     new_graphics_item->setRotation(rotation);
-    new_item->set_name(item_name);
+    scene->addItem(new_graphics_item);
 
-    // Apply color
-    if (auto *rectItem = dynamic_cast<QGraphicsRectItem*>(new_graphics_item)) {
-      rectItem->setBrush(QBrush(fill_color));
-    } else if (auto *ellipseItem = dynamic_cast<QGraphicsEllipseItem*>(new_graphics_item)) {
-      ellipseItem->setBrush(QBrush(fill_color));
-    } else if (auto *lineItem = dynamic_cast<QGraphicsLineItem*>(new_graphics_item)) {
-      QPen pen = lineItem->pen();
-      pen.setColor(fill_color);
-      lineItem->setPen(pen);
+    if (shape_binder_) {
+      shape_binder_->attach_shape(new_item, shapeModel);
+      shape_binder_->unbind_shape(old_item);
     }
 
-    // Now remove old item from model (this will also remove it from scene and delete it)
-    // Note: removeRow will remove from scene and delete the item, so we don't need to do it manually
-    tree_model_->removeRow(row, parent);
+    scene->removeItem(old_graphics_item);
+    delete old_graphics_item;
 
-    // Add new item to model
-    tree_model_->add_item(new_graphics_item, item_name);
-
-    // Select new item
-    scene->clearSelection();
-    new_graphics_item->setSelected(true);
     current_selected_item_ = new_graphics_item;
-
-    // Update properties bar
     if (properties_bar_) {
       properties_bar_->set_selected_item(new_item, item_name);
     }
@@ -335,18 +306,18 @@ void MainWindow::createActivityObjectsBarAndEditor() {
   // Connect model dataChanged to PropertiesBar update
   connect(tree_model_, &QAbstractItemModel::dataChanged, this, [this](const QModelIndex &topLeft, const QModelIndex &, const QVector<int> &roles){
     if (roles.contains(Qt::DisplayRole) || roles.isEmpty()) {
-      auto *item = tree_model_->item_from_index(topLeft);
-      if (item && item == current_selected_item_) {
-        QString name = tree_model_->get_item_name(item);
-        properties_bar_->update_name(name);
-      } else {
-        // Check if it's a preset
-        auto *preset = tree_model_->preset_from_index(topLeft);
-        if (preset && properties_bar_) {
-          // Update preset name in properties bar if it's currently selected
-          // Note: We need to check if current_preset_ matches, but PropertiesBar doesn't expose that
-          // For now, just update if the preset is selected
+      auto shapeModel = tree_model_->shape_from_index(topLeft);
+      if (shapeModel && shape_binder_) {
+        auto *item = shape_binder_->item_for(shapeModel);
+        if (item && item == current_selected_item_) {
+          QString name = QString::fromStdString(shapeModel->name());
+          properties_bar_->update_name(name);
         }
+      }
+      // Check if it's a material node
+      auto material = tree_model_->material_from_index(topLeft);
+      if (material && properties_bar_) {
+        // Could refresh material view if needed
       }
     }
   });
@@ -359,28 +330,29 @@ void MainWindow::createActivityObjectsBarAndEditor() {
       connect(treeView->selectionModel(), &QItemSelectionModel::currentChanged, this,
               [this](const QModelIndex &current, const QModelIndex &){
                 if (!editor_area_) return;
-                // Check if it's an inclusion item
-                auto *item = tree_model_->item_from_index(current);
-                if (item) {
-                  auto *scene = editor_area_->scene();
-                  if (!scene) return;
-                  scene->clearSelection();
-                  item->setSelected(true);
-                  // Update properties bar
-                  if (properties_bar_) {
-                    if (auto *sceneObj = dynamic_cast<ISceneObject*>(item)) {
-                      current_selected_item_ = item;
-                      QString name = tree_model_->get_item_name(item);
-                      properties_bar_->set_selected_item(sceneObj, name);
+                auto shapeModel = tree_model_->shape_from_index(current);
+                if (shapeModel && shape_binder_) {
+                  auto *item = shape_binder_->item_for(shapeModel);
+                  if (item) {
+                    auto *scene = editor_area_->scene();
+                    if (!scene) return;
+                    scene->clearSelection();
+                    item->setSelected(true);
+                    current_selected_item_ = item;
+                    if (properties_bar_) {
+                      if (auto *sceneObj = dynamic_cast<ISceneObject*>(item)) {
+                        QString name = QString::fromStdString(shapeModel->name());
+                        properties_bar_->set_selected_item(sceneObj, name);
+                      }
                     }
+                    return;
                   }
-                  return;
                 }
-                // Check if it's a material preset
-                auto *preset = tree_model_->preset_from_index(current);
-                if (preset && properties_bar_) {
+                // Check if it's a material
+                auto material = tree_model_->material_from_index(current);
+                if (material && properties_bar_) {
                   current_selected_item_ = nullptr;
-                  properties_bar_->set_selected_preset(preset);
+                  properties_bar_->set_selected_material(material.get());
                 }
               });
       // Scene -> Tree selection
@@ -394,15 +366,19 @@ void MainWindow::createActivityObjectsBarAndEditor() {
             }
             return;
           }
-          QModelIndex idx = tree_model_->index_from_item(items.first());
-          if (idx.isValid()) {
-            treeView->selectionModel()->setCurrentIndex(idx, QItemSelectionModel::ClearAndSelect);
+          if (shape_binder_) {
+            if (auto model = shape_binder_->model_for(dynamic_cast<ISceneObject*>(items.first()))) {
+              QModelIndex idx = tree_model_->index_from_shape(model);
+              if (idx.isValid()) {
+                treeView->selectionModel()->setCurrentIndex(idx, QItemSelectionModel::ClearAndSelect);
+              }
+            }
           }
           // Update properties bar
           if (properties_bar_) {
             if (auto *sceneObj = dynamic_cast<ISceneObject*>(items.first())) {
               current_selected_item_ = items.first();
-              QString name = tree_model_->get_item_name(items.first());
+              QString name = sceneObj->name();
               properties_bar_->set_selected_item(sceneObj, name);
             }
           }
@@ -440,33 +416,15 @@ void MainWindow::new_project() {
   }
   current_selected_item_ = nullptr;
 
-  // Clear model first
-  if (tree_model_) {
-    tree_model_->clear_items();
-  }
-
-  QList<QGraphicsItem*> toRemove;
-  for (QGraphicsItem *item : scene->items()) {
-    if (dynamic_cast<SubstrateItem*>(item) == nullptr) {
-      toRemove.append(item);
-    }
-  }
-  for (auto *item : toRemove) {
-    scene->removeItem(item);
-    delete item;
-  }
-
-  // Reset substrate to default
-  if (auto *substrate = editor_area_->substrate_item()) {
-    substrate->set_size(QSizeF(1000, 1000));
-    substrate->set_fill_color(QColor(240, 240, 240));
+  if (document_model_) {
+    document_model_->clear_shapes();
+    document_model_->clear_materials();
+    auto substrate = std::make_shared<SubstrateModel>(Size2D{1000.0, 1000.0}, Color{240, 240, 240, 255});
     substrate->set_name("Substrate");
+    document_model_->set_substrate(substrate);
   }
 
-  // Rebuild model with substrate
-  if (tree_model_) {
-    tree_model_->set_substrate(editor_area_->substrate_item());
-  }
+  rebuild_scene_from_document();
 
   // Clear current file and selection
   current_file_path_.clear();
@@ -486,7 +444,8 @@ void MainWindow::save_project() {
     return;
   }
 
-  if (ProjectSerializer::save_to_file(current_file_path_, editor_area_, tree_model_)) {
+  sync_document_from_scene();
+  if (ProjectSerializer::save_to_file(current_file_path_, document_model_.get())) {
     statusBar()->showMessage("Project saved successfully", 3000);
   } else {
     statusBar()->showMessage("Failed to save project", 3000);
@@ -509,7 +468,8 @@ void MainWindow::save_project_as() {
     return;
   }
 
-  if (ProjectSerializer::save_to_file(filename, editor_area_, tree_model_)) {
+  sync_document_from_scene();
+  if (ProjectSerializer::save_to_file(filename, document_model_.get())) {
     current_file_path_ = filename;
     settings.setValue("lastDirectory", QFileInfo(filename).absolutePath());
     statusBar()->showMessage("Project saved successfully", 3000);
@@ -539,12 +499,121 @@ void MainWindow::open_project() {
   }
   current_selected_item_ = nullptr;
 
-  if (ProjectSerializer::load_from_file(filename, editor_area_, tree_model_)) {
+  if (ProjectSerializer::load_from_file(filename, document_model_.get())) {
+    rebuild_scene_from_document();
     current_file_path_ = filename;
     settings.setValue("lastDirectory", QFileInfo(filename).absolutePath());
     statusBar()->showMessage("Project loaded successfully", 3000);
   } else {
     statusBar()->showMessage("Failed to load project", 3000);
   }
+}
+
+void MainWindow::sync_document_from_scene() {
+  if (!document_model_ || !editor_area_) {
+    return;
+  }
+  auto substrate = document_model_->substrate();
+  if (!substrate) {
+    substrate = std::make_shared<SubstrateModel>();
+    document_model_->set_substrate(substrate);
+  }
+  if (auto *substrate_item = editor_area_->substrate_item()) {
+    const QSizeF size = substrate_item->size();
+    substrate->set_size(Size2D{size.width(), size.height()});
+    substrate->set_color(to_model_color(substrate_item->fill_color()));
+    substrate->set_name(substrate_item->name().toStdString());
+  }
+}
+
+ISceneObject* MainWindow::create_item_for_shape(const std::shared_ptr<ShapeModel> &shape) {
+  if (!shape) {
+    return nullptr;
+  }
+  const Size2D size = shape->size();
+  switch (shape->type()) {
+    case ShapeModel::ShapeType::Rectangle: {
+      auto *item = new RectangleItem(QRectF(0, 0, size.width, size.height));
+      item->set_name(QString::fromStdString(shape->name()));
+      return item;
+    }
+    case ShapeModel::ShapeType::Ellipse: {
+      auto *item = new EllipseItem(QRectF(0, 0, size.width, size.height));
+      item->set_name(QString::fromStdString(shape->name()));
+      return item;
+    }
+    case ShapeModel::ShapeType::Circle: {
+      const qreal radius = static_cast<qreal>(size.width) / 2.0;
+      auto *item = new CircleItem(radius > 0 ? radius : 50.0);
+      item->set_name(QString::fromStdString(shape->name()));
+      return item;
+    }
+    case ShapeModel::ShapeType::Stick: {
+      const qreal halfLen = static_cast<qreal>(size.width) / 2.0;
+      auto *item = new StickItem(QLineF(-halfLen, 0.0, halfLen, 0.0));
+      QPen pen = item->pen();
+      double thickness = size.height > 0 ? size.height : pen.widthF();
+      pen.setWidthF(std::clamp(thickness, 2.0, 6.0));
+      item->setPen(pen);
+      item->set_name(QString::fromStdString(shape->name()));
+      return item;
+    }
+  }
+  return nullptr;
+}
+
+void MainWindow::rebuild_scene_from_document() {
+  if (!document_model_ || !editor_area_ || !shape_binder_) {
+    return;
+  }
+  auto *scene = editor_area_->scene();
+  if (!scene) {
+    return;
+  }
+
+  if (properties_bar_) {
+    properties_bar_->clear();
+  }
+  current_selected_item_ = nullptr;
+
+  shape_binder_->clear_bindings();
+
+  QList<QGraphicsItem*> toRemove;
+  for (QGraphicsItem *item : scene->items()) {
+    if (dynamic_cast<SubstrateItem*>(item) == nullptr) {
+      toRemove.append(item);
+    }
+  }
+  for (QGraphicsItem *item : toRemove) {
+    scene->removeItem(item);
+    delete item;
+  }
+
+  if (auto substrate_model = document_model_->substrate()) {
+    if (auto *substrate_item = editor_area_->substrate_item()) {
+      substrate_item->set_size(QSizeF(substrate_model->size().width, substrate_model->size().height));
+      substrate_item->set_fill_color(to_qcolor(substrate_model->color()));
+      substrate_item->set_name(QString::fromStdString(substrate_model->name()));
+    }
+  }
+
+  for (const auto &shape : document_model_->shapes()) {
+    if (!shape) {
+      continue;
+    }
+    if (auto *sceneObj = create_item_for_shape(shape)) {
+      if (auto *graphicsItem = dynamic_cast<QGraphicsItem*>(sceneObj)) {
+        sceneObj->set_name(QString::fromStdString(shape->name()));
+        graphicsItem->setPos(shape->position().x, shape->position().y);
+        graphicsItem->setRotation(shape->rotation_deg());
+        scene->addItem(graphicsItem);
+        shape_binder_->attach_shape(sceneObj, shape);
+      } else {
+        delete sceneObj;
+      }
+    }
+  }
+
+  tree_model_->set_substrate(editor_area_->substrate_item());
 }
 

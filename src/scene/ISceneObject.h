@@ -1,5 +1,7 @@
 #pragma once
 
+#include <functional>
+
 class QWidget;
 class QJsonObject;
 class QString;
@@ -51,5 +53,15 @@ public:
      * @brief Set object name.
      */
     virtual void set_name(const QString &name) = 0;
+
+    /**
+     * @brief Register callback invoked when geometry changes (position/size/rotation).
+     */
+    virtual void set_geometry_changed_callback(std::function<void()> callback) = 0;
+
+    /**
+     * @brief Remove previously registered geometry callback.
+     */
+    virtual void clear_geometry_changed_callback() = 0;
 };
 

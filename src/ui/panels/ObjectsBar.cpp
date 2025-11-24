@@ -10,15 +10,17 @@
 #include <QModelIndex>
 #include <QGraphicsScene>
 #include <algorithm>
+#include <memory>
 
 #include "model/ObjectTreeModel.h"
-#include "model/MaterialPreset.h"
+#include "model/MaterialModel.h"
 #include "ui/editor/EditorArea.h"
 #include "scene/items/CircleItem.h"
 #include "scene/items/RectangleItem.h"
 #include "scene/items/EllipseItem.h"
 #include "scene/items/StickItem.h"
 #include "scene/ISceneObject.h"
+#include "ui/bindings/ShapeModelBinder.h"
 
 namespace {
 
@@ -70,6 +72,10 @@ void ObjectsBar::setup_toolbar() {
 
 void ObjectsBar::set_editor_area(EditorArea *editor_area) {
   editor_area_ = editor_area;
+}
+
+void ObjectsBar::set_shape_binder(ShapeModelBinder *binder) {
+  shape_binder_ = binder;
 }
 
 void ObjectsBar::add_item_or_preset() {
@@ -130,23 +136,25 @@ void ObjectsBar::add_item_or_preset() {
       auto *circle = new CircleItem(40);
       scene->addItem(circle);
       circle->setPos(c);
-      model->add_item(circle, circle->name());
+      std::shared_ptr<ShapeModel> shapeModel;
+      if (shape_binder_) {
+        shapeModel = shape_binder_->bind_shape(circle);
+      }
       // Select the new item
-      QModelIndex itemIdx = model->index_from_item(circle);
-      if (itemIdx.isValid()) {
-        tree_view_->selectionModel()->setCurrentIndex(itemIdx, QItemSelectionModel::ClearAndSelect);
-        tree_view_->edit(itemIdx); // Start editing name
+      if (shapeModel) {
+        QModelIndex itemIdx = model->index_from_shape(shapeModel);
+        if (itemIdx.isValid()) {
+          tree_view_->selectionModel()->setCurrentIndex(itemIdx, QItemSelectionModel::ClearAndSelect);
+          tree_view_->edit(itemIdx); // Start editing name
+        }
       }
     } else if (isMaterialsContext) {
-      // Add material preset
-      auto *preset = new MaterialPreset(QStringLiteral("New Material"));
-      model->add_preset(preset);
-      // Expand materials node and select new preset
+      auto material = model->create_material(QStringLiteral("New Material"));
       tree_view_->expand(materialsIdx);
-      QModelIndex presetIdx = model->index_from_preset(preset);
-      if (presetIdx.isValid()) {
-        tree_view_->selectionModel()->setCurrentIndex(presetIdx, QItemSelectionModel::ClearAndSelect);
-        tree_view_->edit(presetIdx); // Start editing name
+      QModelIndex materialIdx = model->index_from_material(material);
+      if (materialIdx.isValid()) {
+        tree_view_->selectionModel()->setCurrentIndex(materialIdx, QItemSelectionModel::ClearAndSelect);
+        tree_view_->edit(materialIdx);
       }
     }
   }
@@ -169,15 +177,20 @@ void ObjectsBar::remove_selected_item() {
     }
 
     // Check if it's a material preset
-    auto *preset = model->preset_from_index(current);
-    if (preset) {
-      model->remove_preset(preset);
+    auto material = model->material_from_index(current);
+    if (material) {
+      model->remove_material(material);
       return;
     }
 
     // Otherwise it's an inclusion item
-    auto *item = model->item_from_index(current);
-    if (item) {
+    auto shape = model->shape_from_index(current);
+    if (shape) {
+      if (shape_binder_) {
+        if (auto *item = shape_binder_->item_for(shape)) {
+          shape_binder_->unbind_shape(dynamic_cast<ISceneObject*>(item));
+        }
+      }
       QModelIndex parent = current.parent();
       if (parent.isValid()) {
         model->removeRow(current.row(), parent);

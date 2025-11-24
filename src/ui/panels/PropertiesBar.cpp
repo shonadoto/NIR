@@ -8,11 +8,16 @@
 #include <QVBoxLayout>
 #include <QFormLayout>
 #include "scene/ISceneObject.h"
-#include "model/MaterialPreset.h"
+#include "model/MaterialModel.h"
 #include "model/ObjectTreeModel.h"
 #include "utils/Logging.h"
+#include "ui/bindings/ShapeModelBinder.h"
+#include "ui/utils/ColorUtils.h"
 #include <QGraphicsItem>
 #include <QGraphicsScene>
+#include <QMetaType>
+
+Q_DECLARE_METATYPE(MaterialModel*)
 
 namespace {
 constexpr int kMinPropertiesBarWidthPx = 220;
@@ -21,11 +26,12 @@ constexpr int kDefaultPropertiesBarWidthPx = 280;
 
 PropertiesBar::PropertiesBar(QWidget *parent)
     : QWidget(parent) {
+    qRegisterMetaType<MaterialModel*>("MaterialModel*");
     layout_ = new QVBoxLayout(this);
     layout_->setContentsMargins(8, 8, 8, 8);
     layout_->setSpacing(4);
 
-    type_label_ = new QLabel("Type: ", this);
+    type_label_ = new QLabel("", this);
     QFont f = type_label_->font();
     f.setBold(true);
     type_label_->setFont(f);
@@ -43,24 +49,38 @@ PropertiesBar::PropertiesBar(QWidget *parent)
         }
         QString trimmed = name_edit_->text().trimmed();
 
-        if (current_preset_) {
-            // Handle preset name change
+        if (current_material_) {
+            // Handle material name change
             if (trimmed.isEmpty()) {
                 // Restore previous name
                 updating_ = true;
-                name_edit_->setText(current_preset_->name());
+                name_edit_->setText(QString::fromStdString(current_material_->name()));
                 updating_ = false;
                 return;
             }
-            if (trimmed != current_preset_->name()) {
-                emit preset_name_changed(current_preset_, trimmed);
+            if (trimmed != QString::fromStdString(current_material_->name())) {
+                emit material_name_changed(current_material_, trimmed);
             }
             return;
         }
 
-        if (!current_item_) {
+        if (!current_item_ && !current_model_) {
             return;
         }
+        if (trimmed.isEmpty()) {
+            // Restore previous name
+            updating_ = true;
+            if (current_model_) {
+                name_edit_->setText(QString::fromStdString(current_model_->name()));
+            } else if (current_item_) {
+                name_edit_->setText(current_item_->name());
+            }
+            updating_ = false;
+            return;
+        }
+        if (current_model_) {
+            current_model_->set_name(trimmed.toStdString());
+        } else if (current_item_) {
         // Validate item is still valid before accessing
         if (auto *graphicsItem = dynamic_cast<QGraphicsItem*>(current_item_)) {
             if (!graphicsItem->scene()) {
@@ -69,14 +89,8 @@ PropertiesBar::PropertiesBar(QWidget *parent)
                 return;
             }
         }
-        if (trimmed.isEmpty()) {
-            // Restore previous name
-            updating_ = true;
-            name_edit_->setText(current_item_->name());
-            updating_ = false;
-            return;
-        }
         current_item_->set_name(trimmed);
+        }
         emit name_changed(trimmed);
     });
     layout_->addWidget(name_edit_);
@@ -103,6 +117,20 @@ void PropertiesBar::set_selected_item(ISceneObject *item, const QString &name) {
     LOG_DEBUG() << "PropertiesBar::set_selected_item called with item=" << item << " name=" << name.toStdString();
 
     current_item_ = item;
+    current_material_ = nullptr;
+    if (shape_binder_ && current_item_ && current_item_->type_name() != "substrate") {
+        current_model_ = shape_binder_->bind_shape(current_item_);
+        if (current_model_) {
+            if (auto material = current_model_->material()) {
+                item_material_ = material.get();
+            } else {
+                item_material_ = nullptr;
+            }
+        }
+    } else {
+        current_model_.reset();
+        item_material_ = nullptr;
+    }
     updating_ = true;
 
     // Remove old content
@@ -139,7 +167,11 @@ void PropertiesBar::set_selected_item(ISceneObject *item, const QString &name) {
         return;
     }
     type[0] = type[0].toUpper(); // capitalize first letter
-    type_label_->setText(QString("Type: %1").arg(type));
+    if (type == "Substrate") {
+        type_label_->setText("Substrate");
+    } else {
+        type_label_->setText(QString("Inclusion"));
+    }
     name_edit_->setText(name);
 
     // Update type selector
@@ -192,13 +224,14 @@ void PropertiesBar::set_selected_item(ISceneObject *item, const QString &name) {
         layout_->insertWidget(insertIndex + 1, material_color_btn_);
         material_combo_->setVisible(true);
         material_color_btn_->setVisible(true);
+        material_color_btn_->setEnabled(can_edit_material_color());
     }
 
     updating_ = false;
 }
 
 void PropertiesBar::update_name(const QString &name) {
-    if (current_preset_) {
+    if (current_material_) {
         updating_ = true;
         name_edit_->setText(name);
         updating_ = false;
@@ -222,11 +255,12 @@ void PropertiesBar::update_name(const QString &name) {
 
 void PropertiesBar::clear() {
     current_item_ = nullptr;
-    current_preset_ = nullptr;
+    current_material_ = nullptr;
+    current_model_.reset();
     item_material_ = nullptr;
     updating_ = true;
     name_edit_->clear();
-    type_label_->setText("Type: ");
+    type_label_->setText("");
     type_combo_->setVisible(false);
     material_combo_->setVisible(false);
     material_color_btn_->setVisible(false);
@@ -262,33 +296,34 @@ void PropertiesBar::setup_type_selector() {
 
 void PropertiesBar::setup_material_selector() {
     material_combo_ = new QComboBox(this);
-    material_combo_->addItem("Custom", QVariant::fromValue<MaterialPreset*>(nullptr));
+    material_combo_->addItem("Custom", QVariant::fromValue<MaterialModel*>(nullptr));
     material_combo_->setVisible(false);
 
     connect(material_combo_, QOverload<int>::of(&QComboBox::currentIndexChanged), this, [this](int index) {
         if (updating_ || !current_item_ || !model_) {
             return;
         }
-        MaterialPreset *preset = material_combo_->itemData(index).value<MaterialPreset*>();
-        item_material_ = preset;
+        MaterialModel *material = material_combo_->itemData(index).value<MaterialModel*>();
+        item_material_ = material;
 
-        // Enable/disable color button in content widget
-        if (content_widget_) {
-            QList<QPushButton*> buttons = content_widget_->findChildren<QPushButton*>();
-            for (auto *btn : buttons) {
-                if (btn->text().contains("Color", Qt::CaseInsensitive)) {
-                    btn->setEnabled(preset == nullptr); // Enable only for Custom
+        // Apply to current shape model
+        if (current_model_) {
+            if (material) {
+                auto shared = find_material(material);
+                if (shared) {
+                    current_model_->assign_material(shared);
                 }
+            } else {
+                current_model_->clear_material();
             }
         }
 
-        // Update material UI (updates color button display)
         updating_ = true;
         update_material_color_button();
         updating_ = false;
 
-        // Emit signal to apply color to item
-        emit item_material_changed(current_item_, preset);
+        emit item_material_changed(current_item_, material);
+        material_color_btn_->setEnabled(can_edit_material_color());
     });
 
     material_color_btn_ = new QPushButton("Material Color", this);
@@ -296,10 +331,10 @@ void PropertiesBar::setup_material_selector() {
     connect(material_color_btn_, &QPushButton::clicked, this, [this] {
         if (updating_) return;
         QColor currentColor;
-        if (current_preset_) {
-            currentColor = current_preset_->fill_color();
+        if (current_material_) {
+            currentColor = to_qcolor(current_material_->color());
         } else if (current_item_ && item_material_) {
-            currentColor = item_material_->fill_color();
+            currentColor = to_qcolor(item_material_->color());
         } else if (current_item_) {
             // Get color from item
             if (auto *graphicsItem = dynamic_cast<QGraphicsItem*>(current_item_)) {
@@ -315,25 +350,14 @@ void PropertiesBar::setup_material_selector() {
 
         QColor newColor = QColorDialog::getColor(currentColor, material_color_btn_, "Choose Material Color", QColorDialog::ShowAlphaChannel);
         if (newColor.isValid()) {
-            if (current_preset_) {
-                current_preset_->set_fill_color(newColor);
-                emit preset_color_changed(current_preset_, newColor);
+            if (current_material_) {
+                current_material_->set_color(to_model_color(newColor));
+                emit material_color_changed(current_material_, newColor);
             } else if (current_item_ && item_material_) {
-                item_material_->set_fill_color(newColor);
-                emit item_material_changed(current_item_, item_material_);
-            } else if (current_item_) {
-                // Apply to item directly (Custom material)
-                if (auto *graphicsItem = dynamic_cast<QGraphicsItem*>(current_item_)) {
-                    if (auto *rectItem = dynamic_cast<QGraphicsRectItem*>(graphicsItem)) {
-                        rectItem->setBrush(QBrush(newColor));
-                    } else if (auto *ellipseItem = dynamic_cast<QGraphicsEllipseItem*>(graphicsItem)) {
-                        ellipseItem->setBrush(QBrush(newColor));
-                    } else if (auto *lineItem = dynamic_cast<QGraphicsLineItem*>(graphicsItem)) {
-                        QPen pen = lineItem->pen();
-                        pen.setColor(newColor);
-                        lineItem->setPen(pen);
-                    }
-                }
+                item_material_->set_color(to_model_color(newColor));
+                emit material_color_changed(item_material_, newColor);
+            } else if (current_model_) {
+                current_model_->set_custom_color(to_model_color(newColor));
             }
             update_material_color_button();
         }
@@ -348,10 +372,11 @@ void PropertiesBar::set_model(ObjectTreeModel *model) {
     update_material_ui();
 }
 
-void PropertiesBar::set_selected_preset(MaterialPreset *preset) {
-    current_preset_ = preset;
+void PropertiesBar::set_selected_material(MaterialModel *material) {
+    current_material_ = material;
     current_item_ = nullptr;
     item_material_ = nullptr;
+    current_model_.reset();
     updating_ = true;
 
     // Remove old content
@@ -361,15 +386,15 @@ void PropertiesBar::set_selected_preset(MaterialPreset *preset) {
         content_widget_ = nullptr;
     }
 
-    if (!current_preset_) {
+    if (!current_material_) {
         clear();
         updating_ = false;
         return;
     }
 
     // Update UI for preset
-    type_label_->setText("Type: Material Preset");
-    name_edit_->setText(current_preset_->name());
+    type_label_->setText("Material");
+    name_edit_->setText(QString::fromStdString(current_material_->name()));
     type_combo_->setVisible(false);
     material_combo_->setVisible(false);
 
@@ -378,7 +403,7 @@ void PropertiesBar::set_selected_preset(MaterialPreset *preset) {
         layout_->removeWidget(material_color_btn_);
     }
     // Insert after name_edit (index 2: type_label=0, name_edit=2, no type_combo for preset)
-    layout_->insertWidget(2, material_color_btn_);
+    layout_->insertWidget(3, material_color_btn_);
     material_color_btn_->setVisible(true);
     material_color_btn_->setEnabled(true);
 
@@ -394,17 +419,20 @@ void PropertiesBar::update_material_ui() {
 
     updating_ = true;
 
-    // Update material combo with available presets
+    // Update material combo with available materials
     material_combo_->clear();
-    material_combo_->addItem("Custom", QVariant::fromValue<MaterialPreset*>(nullptr));
-    for (auto *preset : model_->get_presets()) {
-        material_combo_->addItem(preset->name(), QVariant::fromValue<MaterialPreset*>(preset));
+    material_combo_->addItem("Custom", QVariant::fromValue<MaterialModel*>(nullptr));
+    if (auto *doc = model_->document()) {
+        for (const auto &mat : doc->materials()) {
+            material_combo_->addItem(QString::fromStdString(mat->name()),
+                                     QVariant::fromValue<MaterialModel*>(mat.get()));
+        }
     }
 
     // Set current selection
     if (item_material_) {
         for (int i = 0; i < material_combo_->count(); ++i) {
-            if (material_combo_->itemData(i).value<MaterialPreset*>() == item_material_) {
+            if (material_combo_->itemData(i).value<MaterialModel*>() == item_material_) {
                 material_combo_->setCurrentIndex(i);
                 break;
             }
@@ -414,7 +442,6 @@ void PropertiesBar::update_material_ui() {
     }
 
     // Update color button visibility and state
-    material_color_btn_->setEnabled(true);
     update_material_color_button();
 
     updating_ = false;
@@ -422,10 +449,10 @@ void PropertiesBar::update_material_ui() {
 
 void PropertiesBar::update_material_color_button() {
     QColor color;
-    if (current_preset_) {
-        color = current_preset_->fill_color();
+    if (current_material_) {
+        color = to_qcolor(current_material_->color());
     } else if (item_material_) {
-        color = item_material_->fill_color();
+        color = to_qcolor(item_material_->color());
     } else if (current_item_) {
         // Get color from item
         if (auto *graphicsItem = dynamic_cast<QGraphicsItem*>(current_item_)) {
@@ -440,6 +467,7 @@ void PropertiesBar::update_material_color_button() {
     }
     QString style = QString("background-color: %1;").arg(color.name());
     material_color_btn_->setStyleSheet(style);
+    material_color_btn_->setEnabled(can_edit_material_color());
 }
 
 bool PropertiesBar::is_inclusion_item() const {
@@ -449,3 +477,30 @@ bool PropertiesBar::is_inclusion_item() const {
     QString type = current_item_->type_name();
     return type != "substrate";
 }
+
+std::shared_ptr<MaterialModel> PropertiesBar::find_material(MaterialModel *raw) const {
+    if (!raw || !model_) {
+        return nullptr;
+    }
+    auto *doc = model_->document();
+    if (!doc) {
+        return nullptr;
+    }
+    for (const auto &material : doc->materials()) {
+        if (material.get() == raw) {
+            return material;
+        }
+    }
+    return nullptr;
+}
+
+bool PropertiesBar::can_edit_material_color() const {
+    if (current_material_) {
+        return true;
+    }
+    if (!current_item_) {
+        return false;
+    }
+    return item_material_ == nullptr;
+}
+

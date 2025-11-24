@@ -2,6 +2,7 @@
 
 #include <QGraphicsItem>
 #include "scene/ISceneObject.h"
+#include <functional>
 
 class SubstrateItem : public QGraphicsItem, public ISceneObject {
 public:
@@ -23,11 +24,14 @@ public:
     QString type_name() const override { return QStringLiteral("substrate"); }
     QString name() const override { return name_; }
     void set_name(const QString &name) override;
+    void set_geometry_changed_callback(std::function<void()> callback) override { geometry_callback_ = std::move(callback); }
+    void clear_geometry_changed_callback() override { geometry_callback_ = nullptr; }
 
 private:
     QSizeF size_;
     QColor fill_color_ {240, 240, 240};
     QString name_ {"Substrate"};
+    std::function<void()> geometry_callback_;
 };
 
 

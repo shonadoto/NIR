@@ -1,6 +1,7 @@
 #pragma once
 
 #include <QWidget>
+#include <memory>
 
 class QVBoxLayout;
 class QLabel;
@@ -8,8 +9,10 @@ class QLineEdit;
 class QComboBox;
 class QPushButton;
 class ISceneObject;
-class MaterialPreset;
+class MaterialModel;
 class ObjectTreeModel;
+class ShapeModelBinder;
+class ShapeModel;
 
 class PropertiesBar : public QWidget {
   Q_OBJECT
@@ -18,17 +21,18 @@ public:
   ~PropertiesBar() override;
 
   void set_selected_item(ISceneObject *item, const QString &name);
-  void set_selected_preset(MaterialPreset *preset);
+  void set_selected_material(MaterialModel *material);
   void set_model(ObjectTreeModel *model);
+  void set_shape_binder(ShapeModelBinder *binder) { shape_binder_ = binder; }
   void clear();
   void update_name(const QString &name);
 
 signals:
   void name_changed(const QString &new_name);
   void type_changed(ISceneObject *item, const QString &new_type);
-  void preset_name_changed(MaterialPreset *preset, const QString &new_name);
-  void preset_color_changed(MaterialPreset *preset, const QColor &color);
-  void item_material_changed(ISceneObject *item, MaterialPreset *preset);
+  void material_name_changed(MaterialModel *material, const QString &new_name);
+  void material_color_changed(MaterialModel *material, const QColor &color);
+  void item_material_changed(ISceneObject *item, MaterialModel *material);
 
 private:
   void setup_type_selector();
@@ -36,6 +40,7 @@ private:
   bool is_inclusion_item() const;
   void update_material_ui();
   void update_material_color_button();
+  bool can_edit_material_color() const;
 
   QVBoxLayout *layout_ {nullptr};
   QLabel *type_label_ {nullptr};
@@ -45,9 +50,13 @@ private:
   QPushButton *material_color_btn_ {nullptr};
   QWidget *content_widget_ {nullptr};
   ISceneObject *current_item_ {nullptr};
-  MaterialPreset *current_preset_ {nullptr};
+  MaterialModel *current_material_ {nullptr};
   ObjectTreeModel *model_ {nullptr};
-  MaterialPreset *item_material_ {nullptr}; // Material assigned to current item (nullptr = Custom)
+  MaterialModel *item_material_ {nullptr}; // Material assigned to current item (nullptr = Custom)
   int preferred_width_ {280};
   bool updating_ {false};
+  ShapeModelBinder *shape_binder_ {nullptr};
+  std::shared_ptr<ShapeModel> current_model_;
+
+  std::shared_ptr<MaterialModel> find_material(MaterialModel *raw) const;
 };

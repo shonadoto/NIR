@@ -2,13 +2,12 @@
 
 #include <QString>
 
-class EditorArea;
-class ObjectTreeModel;
+class DocumentModel;
 
 class ProjectSerializer {
 public:
-    static bool save_to_file(const QString &filename, EditorArea *editor_area, ObjectTreeModel *model);
-    static bool load_from_file(const QString &filename, EditorArea *editor_area, ObjectTreeModel *model);
+    static bool save_to_file(const QString &filename, DocumentModel *document);
+    static bool load_from_file(const QString &filename, DocumentModel *document);
 
 private:
     ProjectSerializer() = default;

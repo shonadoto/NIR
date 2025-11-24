@@ -1,21 +1,23 @@
 #pragma once
 
 #include <QAbstractItemModel>
-#include <QGraphicsItem>
 #include <QVector>
 #include <QHash>
+#include <memory>
 
 class SubstrateItem;
-class MaterialPreset;
+class MaterialModel;
+class DocumentModel;
+class ShapeModel;
 
 /**
  * @brief Internal node structure for the tree model
  */
 struct TreeNode {
-  enum Type { Root, Inclusions, Materials, InclusionItem, MaterialPresetItem };
+  enum Type { Root, Inclusions, Materials, InclusionItem, MaterialItem };
 
   Type type;
-  void *data{nullptr}; // QGraphicsItem* for InclusionItem, MaterialPreset* for MaterialPresetItem, nullptr for groups
+  void *data{nullptr}; // ShapeModel* for InclusionItem, MaterialModel* for MaterialItem, nullptr for groups
 
   TreeNode(Type t, void *d = nullptr) : type(t), data(d) {}
 };
@@ -28,6 +30,7 @@ public:
 
   // Data source
   void set_substrate(SubstrateItem *substrate);
+  void set_document(DocumentModel *document);
 
   // QAbstractItemModel interface
   QModelIndex index(int row, int column, const QModelIndex &parent) const override;
@@ -41,21 +44,19 @@ public:
   bool removeRows(int row, int count, const QModelIndex &parent) override;
 
   // Helpers for selection sync
-  QGraphicsItem* item_from_index(const QModelIndex &index) const;
-  QModelIndex index_from_item(QGraphicsItem *item) const;
-  MaterialPreset* preset_from_index(const QModelIndex &index) const;
-  QModelIndex index_from_preset(MaterialPreset *preset) const;
+  std::shared_ptr<ShapeModel> shape_from_index(const QModelIndex &index) const;
+  QModelIndex index_from_shape(const std::shared_ptr<ShapeModel> &shape) const;
+  std::shared_ptr<MaterialModel> material_from_index(const QModelIndex &index) const;
+  QModelIndex index_from_material(const std::shared_ptr<MaterialModel> &material) const;
 
   // Modification API for inclusions (shapes)
-  void add_item(QGraphicsItem *item, const QString &name);
-  QString get_item_name(QGraphicsItem *item) const;
   void clear_items();
 
-  // Modification API for material presets
-  void add_preset(MaterialPreset *preset);
-  void remove_preset(MaterialPreset *preset);
-  QVector<MaterialPreset*> get_presets() const;
-  void clear_presets();
+  // Modification API for materials
+  std::shared_ptr<MaterialModel> create_material(const QString &name = {});
+  void remove_material(const std::shared_ptr<MaterialModel> &material);
+  void clear_materials();
+  DocumentModel* document() const { return document_; }
 
 private:
   // Helper methods
@@ -72,11 +73,10 @@ private:
 
   SubstrateItem *substrate_{nullptr};
   QString substrate_name_{"Substrate"};
-  QVector<QGraphicsItem*> items_; // Inclusion shapes (excluding substrate)
-  QHash<QGraphicsItem*, QString> names_;
-  QVector<MaterialPreset*> presets_; // Material presets
-  QHash<QGraphicsItem*, TreeNode*> item_to_node_; // Map items to their tree nodes
-  QHash<MaterialPreset*, TreeNode*> preset_to_node_; // Map presets to their tree nodes
+  mutable QHash<MaterialModel*, TreeNode*> material_nodes_; // Map materials to their tree nodes
+  mutable QHash<ShapeModel*, TreeNode*> shape_nodes_;
+  DocumentModel *document_{nullptr};
+  int document_connection_{0};
 };
 
 
