@@ -303,24 +303,8 @@ void MainWindow::createActivityObjectsBarAndEditor() {
   // We know SideBarWidget registered the "objects" page as index 0
   // so we can safely find the first page's widget and cast to ObjectsBar
   // Alternatively SideBarWidget could expose a getter; for now we search children
-  // Connect model dataChanged to PropertiesBar update
-  connect(tree_model_, &QAbstractItemModel::dataChanged, this, [this](const QModelIndex &topLeft, const QModelIndex &, const QVector<int> &roles){
-    if (roles.contains(Qt::DisplayRole) || roles.isEmpty()) {
-      auto shapeModel = tree_model_->shape_from_index(topLeft);
-      if (shapeModel && shape_binder_) {
-        auto *item = shape_binder_->item_for(shapeModel);
-        if (item && item == current_selected_item_) {
-          QString name = QString::fromStdString(shapeModel->name());
-          properties_bar_->update_name(name);
-        }
-      }
-      // Check if it's a material node
-      auto material = tree_model_->material_from_index(topLeft);
-      if (material && properties_bar_) {
-        // Could refresh material view if needed
-      }
-    }
-  });
+  // PropertiesBar now connects directly to model signals, so no need for dataChanged handler here
+  // The models (MaterialModel, ShapeModel) emit signals when changed, and PropertiesBar listens to them
 
   if (auto *objectsBar = side_bar_widget_->findChild<ObjectsBar*>()) {
     objectsBar->set_model(tree_model_);

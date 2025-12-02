@@ -58,5 +58,12 @@ private:
   ShapeModelBinder *shape_binder_ {nullptr};
   std::shared_ptr<ShapeModel> current_model_;
 
+  // Connection IDs for model change signals
+  int material_connection_id_ {0};
+  int shape_model_connection_id_ {0};
+  std::shared_ptr<MaterialModel> current_material_shared_; // Keep shared_ptr to prevent deletion
+
+  void disconnect_model_signals();
+  void connect_model_signals();
   std::shared_ptr<MaterialModel> find_material(MaterialModel *raw) const;
 };

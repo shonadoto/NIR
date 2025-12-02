@@ -116,8 +116,10 @@ PropertiesBar::~PropertiesBar() {
 void PropertiesBar::set_selected_item(ISceneObject *item, const QString &name) {
     LOG_DEBUG() << "PropertiesBar::set_selected_item called with item=" << item << " name=" << name.toStdString();
 
+    disconnect_model_signals();
     current_item_ = item;
     current_material_ = nullptr;
+    current_material_shared_.reset();
     if (shape_binder_ && current_item_ && current_item_->type_name() != "substrate") {
         current_model_ = shape_binder_->bind_shape(current_item_);
         if (current_model_) {
@@ -228,6 +230,7 @@ void PropertiesBar::set_selected_item(ISceneObject *item, const QString &name) {
     }
 
     updating_ = false;
+    connect_model_signals();
 }
 
 void PropertiesBar::update_name(const QString &name) {
@@ -253,9 +256,52 @@ void PropertiesBar::update_name(const QString &name) {
     updating_ = false;
 }
 
+void PropertiesBar::disconnect_model_signals() {
+    if (current_material_shared_ && material_connection_id_ != 0) {
+        current_material_shared_->on_changed().disconnect(material_connection_id_);
+        material_connection_id_ = 0;
+    }
+    if (current_model_ && shape_model_connection_id_ != 0) {
+        current_model_->on_changed().disconnect(shape_model_connection_id_);
+        shape_model_connection_id_ = 0;
+    }
+}
+
+void PropertiesBar::connect_model_signals() {
+    // Connect to material signals if material is selected
+    if (current_material_shared_) {
+        LOG_DEBUG() << "PropertiesBar: Connecting to material signals for material=" << current_material_shared_.get();
+        material_connection_id_ = current_material_shared_->on_changed().connect([this](const ModelChange &change) {
+            LOG_DEBUG() << "PropertiesBar: Material change signal received, type=" << static_cast<int>(change.type);
+            if (change.type == ModelChange::Type::NameChanged && current_material_shared_) {
+                QString name = QString::fromStdString(current_material_shared_->name());
+                LOG_DEBUG() << "PropertiesBar: Material name changed to=" << name.toStdString();
+                if (!updating_) {
+                    update_name(name);
+                }
+            }
+        });
+    }
+
+    // Connect to shape model signals if shape is selected
+    if (current_model_) {
+        LOG_DEBUG() << "PropertiesBar: Connecting to shape model signals";
+        shape_model_connection_id_ = current_model_->on_changed().connect([this](const ModelChange &change) {
+            if (change.type == ModelChange::Type::NameChanged && current_model_) {
+                QString name = QString::fromStdString(current_model_->name());
+                if (!updating_) {
+                    update_name(name);
+                }
+            }
+        });
+    }
+}
+
 void PropertiesBar::clear() {
+    disconnect_model_signals();
     current_item_ = nullptr;
     current_material_ = nullptr;
+    current_material_shared_.reset();
     current_model_.reset();
     item_material_ = nullptr;
     updating_ = true;
@@ -373,10 +419,23 @@ void PropertiesBar::set_model(ObjectTreeModel *model) {
 }
 
 void PropertiesBar::set_selected_material(MaterialModel *material) {
+    disconnect_model_signals();
     current_material_ = material;
     current_item_ = nullptr;
     item_material_ = nullptr;
     current_model_.reset();
+
+    // Find and store shared_ptr to material
+    current_material_shared_.reset();
+    if (material && model_) {
+        current_material_shared_ = find_material(material);
+        if (!current_material_shared_) {
+            LOG_WARN() << "PropertiesBar: Could not find shared_ptr for material=" << material;
+        } else {
+            LOG_DEBUG() << "PropertiesBar: Found shared_ptr for material=" << material;
+        }
+    }
+
     updating_ = true;
 
     // Remove old content
@@ -410,6 +469,7 @@ void PropertiesBar::set_selected_material(MaterialModel *material) {
     update_material_color_button();
 
     updating_ = false;
+    connect_model_signals();
 }
 
 void PropertiesBar::update_material_ui() {
