@@ -10,6 +10,7 @@
 #include <QJsonObject>
 #include <QJsonArray>
 #include <QVariant>
+#include "model/MaterialModel.h"
 
 namespace {
 constexpr double kMinSizePx = 1.0;
@@ -130,6 +131,11 @@ void RectangleItem::notify_geometry_changed() const {
     if (geometry_changed_callback_) {
         geometry_changed_callback_();
     }
+}
+
+void RectangleItem::set_material_model(MaterialModel *material) {
+    material_model_ = material;
+    update(); // Trigger repaint to show/hide grid
 }
 
 QVariant RectangleItem::itemChange(GraphicsItemChange change, const QVariant &value) {

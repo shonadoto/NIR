@@ -7,6 +7,7 @@
 #include <QColorDialog>
 #include <QVBoxLayout>
 #include <QFormLayout>
+#include <QDoubleSpinBox>
 #include "scene/ISceneObject.h"
 #include "model/MaterialModel.h"
 #include "model/ObjectTreeModel.h"
@@ -39,6 +40,7 @@ PropertiesBar::PropertiesBar(QWidget *parent)
 
     setup_type_selector();
     setup_material_selector(); // Initialize material controls early
+    setup_grid_controls(); // Initialize grid controls
 
     name_edit_ = new QLineEdit(this);
     name_edit_->setPlaceholderText("Object name");
@@ -279,6 +281,11 @@ void PropertiesBar::connect_model_signals() {
                 if (!updating_) {
                     update_name(name);
                 }
+            } else if (change.type == ModelChange::Type::Custom &&
+                       (change.property == "grid_type" || change.property == "grid_frequency")) {
+                if (!updating_) {
+                    update_grid_controls();
+                }
             }
         });
     }
@@ -310,6 +317,8 @@ void PropertiesBar::clear() {
     type_combo_->setVisible(false);
     material_combo_->setVisible(false);
     material_color_btn_->setVisible(false);
+    grid_type_combo_->setVisible(false);
+    grid_frequency_spin_->setVisible(false);
     if (content_widget_) {
         layout_->removeWidget(content_widget_);
         content_widget_->deleteLater();
@@ -413,6 +422,88 @@ void PropertiesBar::setup_material_selector() {
     // Don't add them here to avoid wrong order
 }
 
+void PropertiesBar::setup_grid_controls() {
+    grid_type_combo_ = new QComboBox(this);
+    grid_type_combo_->addItem("None", static_cast<int>(MaterialModel::GridType::None));
+    grid_type_combo_->addItem("Radial", static_cast<int>(MaterialModel::GridType::Radial));
+    grid_type_combo_->addItem("Internal", static_cast<int>(MaterialModel::GridType::Internal));
+    grid_type_combo_->setVisible(false);
+
+    connect(grid_type_combo_, QOverload<int>::of(&QComboBox::currentIndexChanged), this, [this](int index) {
+        if (updating_ || !current_material_shared_) {
+            return;
+        }
+        MaterialModel::GridType gridType = static_cast<MaterialModel::GridType>(
+            grid_type_combo_->itemData(index).toInt());
+        current_material_shared_->set_grid_type(gridType);
+        // Update all shapes using this material
+        if (shape_binder_ && model_) {
+            auto *doc = model_->document();
+            if (doc) {
+                for (const auto &shape : doc->shapes()) {
+                    if (shape->material() == current_material_shared_) {
+                        if (auto *item = shape_binder_->item_for(shape)) {
+                            if (auto *sceneObj = dynamic_cast<ISceneObject*>(item)) {
+                                sceneObj->set_material_model(current_material_shared_.get());
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    });
+
+    grid_frequency_spin_ = new QDoubleSpinBox(this);
+    grid_frequency_spin_->setRange(0.1, 100.0);
+    grid_frequency_spin_->setDecimals(1);
+    grid_frequency_spin_->setSingleStep(1.0);
+    grid_frequency_spin_->setSuffix(" / 100px");
+    grid_frequency_spin_->setVisible(false);
+
+    connect(grid_frequency_spin_, QOverload<double>::of(&QDoubleSpinBox::valueChanged), this, [this](double value) {
+        if (updating_ || !current_material_shared_) {
+            return;
+        }
+        current_material_shared_->set_grid_frequency(value);
+        // Update all shapes using this material
+        if (shape_binder_ && model_) {
+            auto *doc = model_->document();
+            if (doc) {
+                for (const auto &shape : doc->shapes()) {
+                    if (shape->material() == current_material_shared_) {
+                        if (auto *item = shape_binder_->item_for(shape)) {
+                            if (auto *graphicsItem = dynamic_cast<QGraphicsItem*>(item)) {
+                                graphicsItem->update();
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    });
+}
+
+void PropertiesBar::update_grid_controls() {
+    if (!current_material_shared_) {
+        return;
+    }
+    updating_ = true;
+
+    // Set grid type
+    MaterialModel::GridType gridType = current_material_shared_->grid_type();
+    for (int i = 0; i < grid_type_combo_->count(); ++i) {
+        if (grid_type_combo_->itemData(i).toInt() == static_cast<int>(gridType)) {
+            grid_type_combo_->setCurrentIndex(i);
+            break;
+        }
+    }
+
+    // Set grid frequency
+    grid_frequency_spin_->setValue(current_material_shared_->grid_frequency());
+
+    updating_ = false;
+}
+
 void PropertiesBar::set_model(ObjectTreeModel *model) {
     model_ = model;
     update_material_ui();
@@ -462,11 +553,25 @@ void PropertiesBar::set_selected_material(MaterialModel *material) {
         layout_->removeWidget(material_color_btn_);
     }
     // Insert after name_edit (index 2: type_label=0, name_edit=2, no type_combo for preset)
-    layout_->insertWidget(3, material_color_btn_);
+    int insertIndex = 3;
+    layout_->insertWidget(insertIndex++, material_color_btn_);
     material_color_btn_->setVisible(true);
     material_color_btn_->setEnabled(true);
 
+    // Add grid controls
+    if (grid_type_combo_->parent() == this) {
+        layout_->removeWidget(grid_type_combo_);
+    }
+    if (grid_frequency_spin_->parent() == this) {
+        layout_->removeWidget(grid_frequency_spin_);
+    }
+    layout_->insertWidget(insertIndex++, grid_type_combo_);
+    layout_->insertWidget(insertIndex++, grid_frequency_spin_);
+    grid_type_combo_->setVisible(true);
+    grid_frequency_spin_->setVisible(true);
+
     update_material_color_button();
+    update_grid_controls();
 
     updating_ = false;
     connect_model_signals();

@@ -63,5 +63,11 @@ public:
      * @brief Remove previously registered geometry callback.
      */
     virtual void clear_geometry_changed_callback() = 0;
+
+    /**
+     * @brief Set material model for grid rendering.
+     * @param material Pointer to material model (can be nullptr for no material).
+     */
+    virtual void set_material_model(class MaterialModel *material) = 0;
 };
 

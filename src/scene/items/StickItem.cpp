@@ -10,6 +10,7 @@
 #include <QPainter>
 #include <cmath>
 #include <algorithm>
+#include "model/MaterialModel.h"
 
 namespace {
 constexpr double kMinLengthPx = 1.0;
@@ -132,6 +133,11 @@ void StickItem::notify_geometry_changed() const {
     if (geometry_changed_callback_) {
         geometry_changed_callback_();
     }
+}
+
+void StickItem::set_material_model(MaterialModel *material) {
+    material_model_ = material;
+    update(); // Trigger repaint to show/hide grid
 }
 
 QVariant StickItem::itemChange(GraphicsItemChange change, const QVariant &value) {

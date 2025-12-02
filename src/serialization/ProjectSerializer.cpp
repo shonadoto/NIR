@@ -155,6 +155,9 @@ bool ProjectSerializer::save_to_file(const QString &filename, DocumentModel *doc
         QJsonObject materialObj;
         materialObj["name"] = QString::fromStdString(material->name());
         materialObj["color"] = color_to_json(material->color());
+        // Save grid settings
+        materialObj["grid_type"] = static_cast<int>(material->grid_type());
+        materialObj["grid_frequency"] = material->grid_frequency();
         materials.append(materialObj);
     }
     root["materials"] = materials;
@@ -256,6 +259,15 @@ bool ProjectSerializer::load_from_file(const QString &filename, DocumentModel *d
             ? color_from_json(materialObj["color"].toArray())
             : color_from_json(materialObj["fill_color"].toArray());
         auto material = document->create_material(color, name.toStdString());
+
+        // Load grid settings
+        if (materialObj.contains("grid_type")) {
+            material->set_grid_type(static_cast<MaterialModel::GridType>(materialObj["grid_type"].toInt()));
+        }
+        if (materialObj.contains("grid_frequency")) {
+            material->set_grid_frequency(materialObj["grid_frequency"].toDouble());
+        }
+
         materials_by_name.emplace(name.toStdString(), material);
     }
 

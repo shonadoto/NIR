@@ -107,6 +107,12 @@ std::shared_ptr<ShapeModel> ShapeModelBinder::bind_shape(ISceneObject *item) {
     apply_color_to_item(item, model->material_mode() == ShapeModel::MaterialMode::Custom
                                 ? model->custom_color()
                                 : (model->material() ? model->material()->color() : Color{}) );
+    // Ensure material is set for grid rendering
+    if (model->material()) {
+        item->set_material_model(model->material().get());
+    } else {
+        item->set_material_model(nullptr);
+    }
     return model;
 }
 
@@ -131,6 +137,12 @@ std::shared_ptr<ShapeModel> ShapeModelBinder::attach_shape(ISceneObject *item, c
     apply_color_to_item(item, model->material_mode() == ShapeModel::MaterialMode::Custom
                                 ? model->custom_color()
                                 : (model->material() ? model->material()->color() : Color{}) );
+    // Ensure material is set for grid rendering
+    if (model->material()) {
+        item->set_material_model(model->material().get());
+    } else {
+        item->set_material_model(nullptr);
+    }
     return model;
 }
 
@@ -191,6 +203,12 @@ void ShapeModelBinder::handle_change(ISceneObject *item, const ModelChange &chan
             break;
         case ModelChange::Type::MaterialChanged:
             update_material_binding(item, bindingIt->second);
+            // Material changed, update grid rendering
+            if (model->material()) {
+                item->set_material_model(model->material().get());
+            } else {
+                item->set_material_model(nullptr);
+            }
             [[fallthrough]];
         case ModelChange::Type::ColorChanged: {
             Color color = model->material_mode() == ShapeModel::MaterialMode::Preset && model->material()
@@ -222,18 +240,20 @@ Color ShapeModelBinder::extract_color(const ISceneObject *item) const {
 void ShapeModelBinder::update_material_binding(ISceneObject *item, Binding &binding) {
     detach_material_binding(binding);
     if (!binding.model) {
+        item->set_material_model(nullptr);
         return;
     }
     auto material = binding.model->material();
     if (!material) {
+        item->set_material_model(nullptr);
         return;
     }
     binding.bound_material = material;
+    // Set material model in item for grid rendering
+    item->set_material_model(material.get());
+
     MaterialModel *material_ptr = material.get();
     binding.material_connection_id = material->on_changed().connect([this, item, material_ptr](const ModelChange &change){
-        if (change.type != ModelChange::Type::ColorChanged) {
-            return;
-        }
         auto it = bindings_.find(item);
         if (it == bindings_.end()) {
             return;
@@ -241,7 +261,16 @@ void ShapeModelBinder::update_material_binding(ISceneObject *item, Binding &bind
         if (!it->second.bound_material || it->second.bound_material.get() != material_ptr) {
             return;
         }
-        apply_color(item, it->second.bound_material->color());
+
+        if (change.type == ModelChange::Type::ColorChanged) {
+            apply_color(item, it->second.bound_material->color());
+        } else if (change.type == ModelChange::Type::Custom &&
+                   (change.property == "grid_type" || change.property == "grid_frequency")) {
+            // Update item to redraw grid
+            if (auto *graphicsItem = dynamic_cast<QGraphicsItem*>(item)) {
+                graphicsItem->update();
+            }
+        }
     });
 }
 

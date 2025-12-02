@@ -8,6 +8,10 @@
 #include <QJsonObject>
 #include <QJsonArray>
 #include <QVariant>
+#include <QPainter>
+#include <QStyleOptionGraphicsItem>
+#include <QtMath>
+#include "model/MaterialModel.h"
 
 namespace {
 constexpr double kMinSizePx = 1.0;
@@ -128,6 +132,72 @@ void EllipseItem::notify_geometry_changed() const {
     if (geometry_changed_callback_) {
         geometry_changed_callback_();
     }
+}
+
+void EllipseItem::set_material_model(MaterialModel *material) {
+    material_model_ = material;
+    update(); // Trigger repaint to show/hide grid
+}
+
+void EllipseItem::paint(QPainter *painter, const QStyleOptionGraphicsItem *option, QWidget *widget) {
+    // Draw the base ellipse first
+    QGraphicsEllipseItem::paint(painter, option, widget);
+
+    // Draw grid if material has grid enabled
+    if (material_model_ && material_model_->grid_type() == MaterialModel::GridType::Radial) {
+        draw_radial_grid(painter, rect());
+    }
+}
+
+void EllipseItem::draw_radial_grid(QPainter *painter, const QRectF &rect) const {
+    if (!material_model_) {
+        return;
+    }
+
+    painter->save();
+
+    QPen gridPen(QColor(0, 0, 0, 100)); // Semi-transparent black
+    gridPen.setWidthF(0.5);
+    painter->setPen(gridPen);
+
+    const QPointF center = rect.center();
+    const qreal halfWidth = rect.width() / 2.0;
+    const qreal halfHeight = rect.height() / 2.0;
+    const qreal maxRadius = qMax(halfWidth, halfHeight);
+    const double frequency = material_model_->grid_frequency();
+
+    // Frequency is "lines per 100px", so calculate spacing based on max radius
+    const qreal spacing = 100.0 / frequency; // Distance between concentric ellipses in pixels
+
+    // Draw radial lines (from center to edge) - more lines for larger ellipses
+    const int numRadialLines = qMax(8, static_cast<int>(frequency * (maxRadius / 100.0) * 2));
+    for (int i = 0; i < numRadialLines; ++i) {
+        const qreal angle = (360.0 * i) / numRadialLines;
+        const qreal radians = qDegreesToRadians(angle);
+        // Calculate point on ellipse edge
+        const qreal cosA = qCos(radians);
+        const qreal sinA = qSin(radians);
+        const qreal a = halfWidth;
+        const qreal b = halfHeight;
+        const qreal r = (a * b) / qSqrt(b * b * cosA * cosA + a * a * sinA * sinA);
+        const QPointF endPoint = center + QPointF(r * cosA, r * sinA);
+        painter->drawLine(center, endPoint);
+    }
+
+    // Draw concentric ellipses with spacing based on frequency
+    qreal currentScale = spacing / maxRadius;
+    while (currentScale < 1.0) {
+        const QRectF ellipseRect(
+            center.x() - halfWidth * currentScale,
+            center.y() - halfHeight * currentScale,
+            halfWidth * currentScale * 2,
+            halfHeight * currentScale * 2
+        );
+        painter->drawEllipse(ellipseRect);
+        currentScale += spacing / maxRadius;
+    }
+
+    painter->restore();
 }
 
 QVariant EllipseItem::itemChange(GraphicsItemChange change, const QVariant &value) {
