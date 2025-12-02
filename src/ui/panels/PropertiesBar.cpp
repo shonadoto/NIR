@@ -223,12 +223,45 @@ void PropertiesBar::set_selected_item(ISceneObject *item, const QString &name) {
         if (material_color_btn_->parent() == this) {
             layout_->removeWidget(material_color_btn_);
         }
+        if (grid_type_label_->parent() == this) {
+            layout_->removeWidget(grid_type_label_);
+        }
+        if (grid_type_combo_->parent() == this) {
+            layout_->removeWidget(grid_type_combo_);
+        }
+        if (grid_frequency_x_spin_->parent() == this) {
+            layout_->removeWidget(grid_frequency_x_spin_);
+        }
+        if (grid_frequency_y_spin_->parent() == this) {
+            layout_->removeWidget(grid_frequency_y_spin_);
+        }
         // Insert after content_widget
-        layout_->insertWidget(insertIndex, material_combo_);
-        layout_->insertWidget(insertIndex + 1, material_color_btn_);
+        layout_->insertWidget(insertIndex++, material_combo_);
+        layout_->insertWidget(insertIndex++, material_color_btn_);
+        layout_->insertWidget(insertIndex++, grid_type_label_);
+        layout_->insertWidget(insertIndex++, grid_type_combo_);
+        layout_->insertWidget(insertIndex++, grid_frequency_x_spin_);
+        layout_->insertWidget(insertIndex++, grid_frequency_y_spin_);
         material_combo_->setVisible(true);
         material_color_btn_->setVisible(true);
         material_color_btn_->setEnabled(can_edit_material_color());
+        // Show grid controls if custom material
+        if (current_model_ && current_model_->material_mode() == ShapeModel::MaterialMode::Custom) {
+            grid_type_label_->setVisible(true);
+            grid_type_combo_->setVisible(true);
+            // Set current_material_shared_ to custom material for grid controls
+            current_material_shared_ = current_model_->material();
+            update_grid_controls(); // This will set visibility of frequency spins based on grid type
+        } else {
+            grid_type_label_->setVisible(false);
+            grid_type_combo_->setVisible(false);
+            grid_frequency_x_spin_->setVisible(false);
+            grid_frequency_y_spin_->setVisible(false);
+        }
+        // Set material model for scene item
+        if (current_model_ && current_model_->material()) {
+            current_item_->set_material_model(current_model_->material().get());
+        }
     }
 
     updating_ = false;
@@ -317,8 +350,10 @@ void PropertiesBar::clear() {
     type_combo_->setVisible(false);
     material_combo_->setVisible(false);
     material_color_btn_->setVisible(false);
+    grid_type_label_->setVisible(false);
     grid_type_combo_->setVisible(false);
-    grid_frequency_spin_->setVisible(false);
+    grid_frequency_x_spin_->setVisible(false);
+    grid_frequency_y_spin_->setVisible(false);
     if (content_widget_) {
         layout_->removeWidget(content_widget_);
         content_widget_->deleteLater();
@@ -367,9 +402,26 @@ void PropertiesBar::setup_material_selector() {
                 auto shared = find_material(material);
                 if (shared) {
                     current_model_->assign_material(shared);
+                    current_material_shared_ = shared;
+                    // Hide grid controls for preset
+                    grid_type_label_->setVisible(false);
+                    grid_type_combo_->setVisible(false);
+                    grid_frequency_x_spin_->setVisible(false);
+                    grid_frequency_y_spin_->setVisible(false);
                 }
             } else {
                 current_model_->clear_material();
+                current_material_shared_ = current_model_->material();
+                // Show grid controls for custom
+                if (grid_type_combo_->parent() == this && grid_frequency_x_spin_->parent() == this) {
+                    grid_type_label_->setVisible(true);
+                    grid_type_combo_->setVisible(true);
+                    update_grid_controls(); // This will set visibility of frequency_spin based on grid type
+                }
+            }
+            // Update material model for scene item
+            if (current_model_->material() && current_item_) {
+                current_item_->set_material_model(current_model_->material().get());
             }
         }
 
@@ -411,8 +463,8 @@ void PropertiesBar::setup_material_selector() {
             } else if (current_item_ && item_material_) {
                 item_material_->set_color(to_model_color(newColor));
                 emit material_color_changed(item_material_, newColor);
-            } else if (current_model_) {
-                current_model_->set_custom_color(to_model_color(newColor));
+            } else if (current_model_ && current_model_->material()) {
+                current_model_->material()->set_color(to_model_color(newColor));
             }
             update_material_color_button();
         }
@@ -423,9 +475,11 @@ void PropertiesBar::setup_material_selector() {
 }
 
 void PropertiesBar::setup_grid_controls() {
+    grid_type_label_ = new QLabel("Grid Type:", this);
+    grid_type_label_->setVisible(false);
+
     grid_type_combo_ = new QComboBox(this);
     grid_type_combo_->addItem("None", static_cast<int>(MaterialModel::GridType::None));
-    grid_type_combo_->addItem("Radial", static_cast<int>(MaterialModel::GridType::Radial));
     grid_type_combo_->addItem("Internal", static_cast<int>(MaterialModel::GridType::Internal));
     grid_type_combo_->setVisible(false);
 
@@ -436,7 +490,15 @@ void PropertiesBar::setup_grid_controls() {
         MaterialModel::GridType gridType = static_cast<MaterialModel::GridType>(
             grid_type_combo_->itemData(index).toInt());
         current_material_shared_->set_grid_type(gridType);
-        // Update all shapes using this material
+        // Show/hide frequency controls based on grid type
+        const bool showGrid = gridType != MaterialModel::GridType::None;
+        grid_frequency_x_spin_->setVisible(showGrid);
+        grid_frequency_y_spin_->setVisible(showGrid);
+        // Update current item if custom material
+        if (current_item_ && current_model_ && current_model_->material_mode() == ShapeModel::MaterialMode::Custom) {
+            current_item_->set_material_model(current_material_shared_.get());
+        }
+        // Update all shapes using this material (for preset materials)
         if (shape_binder_ && model_) {
             auto *doc = model_->document();
             if (doc) {
@@ -453,19 +515,27 @@ void PropertiesBar::setup_grid_controls() {
         }
     });
 
-    grid_frequency_spin_ = new QDoubleSpinBox(this);
-    grid_frequency_spin_->setRange(0.1, 100.0);
-    grid_frequency_spin_->setDecimals(1);
-    grid_frequency_spin_->setSingleStep(1.0);
-    grid_frequency_spin_->setSuffix(" / 100px");
-    grid_frequency_spin_->setVisible(false);
+    grid_frequency_x_spin_ = new QDoubleSpinBox(this);
+    grid_frequency_x_spin_->setRange(1.0, 100.0);
+    grid_frequency_x_spin_->setDecimals(0);
+    grid_frequency_x_spin_->setSingleStep(1.0);
+    grid_frequency_x_spin_->setVisible(false);
 
-    connect(grid_frequency_spin_, QOverload<double>::of(&QDoubleSpinBox::valueChanged), this, [this](double value) {
+    grid_frequency_y_spin_ = new QDoubleSpinBox(this);
+    grid_frequency_y_spin_->setRange(1.0, 100.0);
+    grid_frequency_y_spin_->setDecimals(0);
+    grid_frequency_y_spin_->setSingleStep(1.0);
+    grid_frequency_y_spin_->setVisible(false);
+
+    auto updateGrid = [this]() {
         if (updating_ || !current_material_shared_) {
             return;
         }
-        current_material_shared_->set_grid_frequency(value);
-        // Update all shapes using this material
+        // Update current item if custom material
+        if (current_item_ && current_model_ && current_model_->material_mode() == ShapeModel::MaterialMode::Custom) {
+            current_item_->set_material_model(current_material_shared_.get());
+        }
+        // Update all shapes using this material (for preset materials)
         if (shape_binder_ && model_) {
             auto *doc = model_->document();
             if (doc) {
@@ -480,6 +550,22 @@ void PropertiesBar::setup_grid_controls() {
                 }
             }
         }
+    };
+
+    connect(grid_frequency_x_spin_, QOverload<double>::of(&QDoubleSpinBox::valueChanged), this, [this, updateGrid](double value) {
+        if (updating_ || !current_material_shared_) {
+            return;
+        }
+        current_material_shared_->set_grid_frequency_x(value);
+        updateGrid();
+    });
+
+    connect(grid_frequency_y_spin_, QOverload<double>::of(&QDoubleSpinBox::valueChanged), this, [this, updateGrid](double value) {
+        if (updating_ || !current_material_shared_) {
+            return;
+        }
+        current_material_shared_->set_grid_frequency_y(value);
+        updateGrid();
     });
 }
 
@@ -498,8 +584,29 @@ void PropertiesBar::update_grid_controls() {
         }
     }
 
-    // Set grid frequency
-    grid_frequency_spin_->setValue(current_material_shared_->grid_frequency());
+    // Set grid frequencies and show/hide based on grid type
+    const bool showGrid = gridType != MaterialModel::GridType::None;
+    // Label and combo are always visible when grid controls are shown (they control the grid type)
+    // Only frequency controls are hidden when grid type is None
+    grid_frequency_x_spin_->setValue(current_material_shared_->grid_frequency_x());
+    grid_frequency_x_spin_->setVisible(showGrid);
+    grid_frequency_y_spin_->setValue(current_material_shared_->grid_frequency_y());
+    grid_frequency_y_spin_->setVisible(showGrid);
+
+    // Update labels based on shape type
+    if (current_item_ && showGrid) {
+        QString typeName = current_item_->type_name();
+        if (typeName == "rectangle") {
+            grid_frequency_x_spin_->setSuffix(" horizontal");
+            grid_frequency_y_spin_->setSuffix(" vertical");
+        } else if (typeName == "circle" || typeName == "ellipse") {
+            grid_frequency_x_spin_->setSuffix(" radial");
+            grid_frequency_y_spin_->setSuffix(" concentric");
+        } else {
+            grid_frequency_x_spin_->setSuffix("");
+            grid_frequency_y_spin_->setSuffix("");
+        }
+    }
 
     updating_ = false;
 }
@@ -559,19 +666,27 @@ void PropertiesBar::set_selected_material(MaterialModel *material) {
     material_color_btn_->setEnabled(true);
 
     // Add grid controls
+    if (grid_type_label_->parent() == this) {
+        layout_->removeWidget(grid_type_label_);
+    }
     if (grid_type_combo_->parent() == this) {
         layout_->removeWidget(grid_type_combo_);
     }
-    if (grid_frequency_spin_->parent() == this) {
-        layout_->removeWidget(grid_frequency_spin_);
+    if (grid_frequency_x_spin_->parent() == this) {
+        layout_->removeWidget(grid_frequency_x_spin_);
     }
+    if (grid_frequency_y_spin_->parent() == this) {
+        layout_->removeWidget(grid_frequency_y_spin_);
+    }
+    layout_->insertWidget(insertIndex++, grid_type_label_);
     layout_->insertWidget(insertIndex++, grid_type_combo_);
-    layout_->insertWidget(insertIndex++, grid_frequency_spin_);
+    layout_->insertWidget(insertIndex++, grid_frequency_x_spin_);
+    layout_->insertWidget(insertIndex++, grid_frequency_y_spin_);
+    grid_type_label_->setVisible(true);
     grid_type_combo_->setVisible(true);
-    grid_frequency_spin_->setVisible(true);
 
     update_material_color_button();
-    update_grid_controls();
+    update_grid_controls(); // This will set visibility of frequency_spin based on grid type
 
     updating_ = false;
     connect_model_signals();

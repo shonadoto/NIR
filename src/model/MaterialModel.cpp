@@ -19,11 +19,19 @@ void MaterialModel::set_grid_type(GridType type) {
     notify_change(ModelChange{ModelChange::Type::Custom, "grid_type"});
 }
 
-void MaterialModel::set_grid_frequency(double frequency) {
-    if (grid_frequency_ == frequency || frequency <= 0.0) {
+void MaterialModel::set_grid_frequency_x(double frequency) {
+    if (grid_frequency_x_ == frequency || frequency < 1.0) {
         return;
     }
-    grid_frequency_ = frequency;
-    notify_change(ModelChange{ModelChange::Type::Custom, "grid_frequency"});
+    grid_frequency_x_ = frequency;
+    notify_change(ModelChange{ModelChange::Type::Custom, "grid_frequency_x"});
+}
+
+void MaterialModel::set_grid_frequency_y(double frequency) {
+    if (grid_frequency_y_ == frequency || frequency < 1.0) {
+        return;
+    }
+    grid_frequency_y_ = frequency;
+    notify_change(ModelChange{ModelChange::Type::Custom, "grid_frequency_y"});
 }
 

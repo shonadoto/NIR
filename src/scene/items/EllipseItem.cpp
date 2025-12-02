@@ -9,6 +9,7 @@
 #include <QJsonArray>
 #include <QVariant>
 #include <QPainter>
+#include <QPainterPath>
 #include <QStyleOptionGraphicsItem>
 #include <QtMath>
 #include "model/MaterialModel.h"
@@ -143,8 +144,8 @@ void EllipseItem::paint(QPainter *painter, const QStyleOptionGraphicsItem *optio
     // Draw the base ellipse first
     QGraphicsEllipseItem::paint(painter, option, widget);
 
-    // Draw grid if material has grid enabled
-    if (material_model_ && material_model_->grid_type() == MaterialModel::GridType::Radial) {
+    // Draw grid if material has Internal grid enabled (radial for ellipses)
+    if (material_model_ && material_model_->grid_type() == MaterialModel::GridType::Internal) {
         draw_radial_grid(painter, rect());
     }
 }
@@ -156,6 +157,11 @@ void EllipseItem::draw_radial_grid(QPainter *painter, const QRectF &rect) const 
 
     painter->save();
 
+    // Clip to ellipse boundary
+    QPainterPath clipPath;
+    clipPath.addEllipse(rect);
+    painter->setClipPath(clipPath);
+
     QPen gridPen(QColor(0, 0, 0, 100)); // Semi-transparent black
     gridPen.setWidthF(0.5);
     painter->setPen(gridPen);
@@ -164,13 +170,11 @@ void EllipseItem::draw_radial_grid(QPainter *painter, const QRectF &rect) const 
     const qreal halfWidth = rect.width() / 2.0;
     const qreal halfHeight = rect.height() / 2.0;
     const qreal maxRadius = qMax(halfWidth, halfHeight);
-    const double frequency = material_model_->grid_frequency();
+    const double freqRadial = material_model_->grid_frequency_x(); // Number of radial lines
+    const double freqConcentric = material_model_->grid_frequency_y(); // Number of concentric ellipses
 
-    // Frequency is "lines per 100px", so calculate spacing based on max radius
-    const qreal spacing = 100.0 / frequency; // Distance between concentric ellipses in pixels
-
-    // Draw radial lines (from center to edge) - more lines for larger ellipses
-    const int numRadialLines = qMax(8, static_cast<int>(frequency * (maxRadius / 100.0) * 2));
+    // Draw radial lines
+    const int numRadialLines = static_cast<int>(freqRadial);
     for (int i = 0; i < numRadialLines; ++i) {
         const qreal angle = (360.0 * i) / numRadialLines;
         const qreal radians = qDegreesToRadians(angle);
@@ -184,7 +188,8 @@ void EllipseItem::draw_radial_grid(QPainter *painter, const QRectF &rect) const 
         painter->drawLine(center, endPoint);
     }
 
-    // Draw concentric ellipses with spacing based on frequency
+    // Draw concentric ellipses
+    const qreal spacing = maxRadius / freqConcentric;
     qreal currentScale = spacing / maxRadius;
     while (currentScale < 1.0) {
         const QRectF ellipseRect(

@@ -21,12 +21,10 @@ public:
 
 protected:
     QVariant itemChange(GraphicsItemChange change, const QVariant &value) override;
-    void paint(QPainter *painter, const QStyleOptionGraphicsItem *option, QWidget *widget = nullptr) override;
 
 private:
     QString name_ {"Stick"};
     std::function<void()> geometry_changed_callback_;
-    class MaterialModel *material_model_ {nullptr};
 
     void notify_geometry_changed() const;
 };

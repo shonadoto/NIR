@@ -1,4 +1,5 @@
 #include <QApplication>
+#include <QIcon>
 #include "ui/MainWindow.h"
 #include "utils/Logging.h"
 #include <spdlog/spdlog.h>
@@ -90,6 +91,7 @@ int main(int argc, char *argv[]) {
 
     QApplication app(argc, argv);
     app.setApplicationName("NIRMaterialEditor");
+    app.setWindowIcon(QIcon(":/icons/app.svg"));
 
     setup_logging();
     LOG_INFO() << "Application starting";

@@ -7,9 +7,7 @@
 #include <QJsonObject>
 #include <QJsonArray>
 #include <QVariant>
-#include <QPainter>
 #include <cmath>
-#include <algorithm>
 #include "model/MaterialModel.h"
 
 namespace {
@@ -136,8 +134,8 @@ void StickItem::notify_geometry_changed() const {
 }
 
 void StickItem::set_material_model(MaterialModel *material) {
-    material_model_ = material;
-    update(); // Trigger repaint to show/hide grid
+    // Stick items don't use grid, but we need to implement the interface
+    (void)material;
 }
 
 QVariant StickItem::itemChange(GraphicsItemChange change, const QVariant &value) {
@@ -145,19 +143,5 @@ QVariant StickItem::itemChange(GraphicsItemChange change, const QVariant &value)
         notify_geometry_changed();
     }
     return QGraphicsLineItem::itemChange(change, value);
-}
-
-void StickItem::paint(QPainter *painter, const QStyleOptionGraphicsItem *option, QWidget *widget) {
-    painter->save();
-    QPen fill_pen = pen();
-    const qreal fill_width = std::max(1.0, fill_pen.widthF());
-    QPen border_pen = fill_pen;
-    border_pen.setColor(fill_pen.color().darker(160));
-    border_pen.setWidthF(fill_width + 2.0);
-    painter->setPen(border_pen);
-    QGraphicsLineItem::paint(painter, option, widget);
-    painter->setPen(fill_pen);
-    QGraphicsLineItem::paint(painter, option, widget);
-    painter->restore();
 }
 

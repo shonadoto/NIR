@@ -9,7 +9,6 @@
 #include <QGraphicsScene>
 #include <QLineF>
 #include <QPen>
-#include <algorithm>
 #include <QItemSelectionModel>
 #include "ui/editor/EditorArea.h"
 #include "ui/panels/ObjectsBar.h"
@@ -264,8 +263,8 @@ void MainWindow::createActivityObjectsBarAndEditor() {
         case ShapeModel::ShapeType::Stick: {
           double length = std::max(old_size.width(), old_size.height());
           if (length < 1.0) length = 100.0;
-          constexpr double kDefaultThickness = 2.0;
-          shapeModel->set_size(Size2D{length, kDefaultThickness});
+          double thickness = std::max(2.0, std::min(old_size.width(), old_size.height()));
+          shapeModel->set_size(Size2D{length, thickness});
           break;
         }
       }
@@ -303,8 +302,24 @@ void MainWindow::createActivityObjectsBarAndEditor() {
   // We know SideBarWidget registered the "objects" page as index 0
   // so we can safely find the first page's widget and cast to ObjectsBar
   // Alternatively SideBarWidget could expose a getter; for now we search children
-  // PropertiesBar now connects directly to model signals, so no need for dataChanged handler here
-  // The models (MaterialModel, ShapeModel) emit signals when changed, and PropertiesBar listens to them
+  // Connect model dataChanged to PropertiesBar update
+  connect(tree_model_, &QAbstractItemModel::dataChanged, this, [this](const QModelIndex &topLeft, const QModelIndex &, const QVector<int> &roles){
+    if (roles.contains(Qt::DisplayRole) || roles.isEmpty()) {
+      auto shapeModel = tree_model_->shape_from_index(topLeft);
+      if (shapeModel && shape_binder_) {
+        auto *item = shape_binder_->item_for(shapeModel);
+        if (item && item == current_selected_item_) {
+          QString name = QString::fromStdString(shapeModel->name());
+          properties_bar_->update_name(name);
+        }
+      }
+      // Check if it's a material node
+      auto material = tree_model_->material_from_index(topLeft);
+      if (material && properties_bar_) {
+        // Could refresh material view if needed
+      }
+    }
+  });
 
   if (auto *objectsBar = side_bar_widget_->findChild<ObjectsBar*>()) {
     objectsBar->set_model(tree_model_);
@@ -536,8 +551,7 @@ ISceneObject* MainWindow::create_item_for_shape(const std::shared_ptr<ShapeModel
       const qreal halfLen = static_cast<qreal>(size.width) / 2.0;
       auto *item = new StickItem(QLineF(-halfLen, 0.0, halfLen, 0.0));
       QPen pen = item->pen();
-      double thickness = size.height > 0 ? size.height : pen.widthF();
-      pen.setWidthF(std::clamp(thickness, 2.0, 6.0));
+      pen.setWidthF(size.height > 0 ? size.height : pen.widthF());
       item->setPen(pen);
       item->set_name(QString::fromStdString(shape->name()));
       return item;

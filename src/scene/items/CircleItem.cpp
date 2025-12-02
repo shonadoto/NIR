@@ -9,6 +9,7 @@
 #include <QJsonArray>
 #include <QVariant>
 #include <QPainter>
+#include <QPainterPath>
 #include <QStyleOptionGraphicsItem>
 #include <QtMath>
 #include "model/MaterialModel.h"
@@ -126,8 +127,8 @@ void CircleItem::paint(QPainter *painter, const QStyleOptionGraphicsItem *option
     // Draw the base ellipse first
     QGraphicsEllipseItem::paint(painter, option, widget);
 
-    // Draw grid if material has grid enabled
-    if (material_model_ && material_model_->grid_type() == MaterialModel::GridType::Radial) {
+    // Draw grid if material has Internal grid enabled (radial for circles)
+    if (material_model_ && material_model_->grid_type() == MaterialModel::GridType::Internal) {
         draw_radial_grid(painter, rect());
     }
 }
@@ -139,21 +140,22 @@ void CircleItem::draw_radial_grid(QPainter *painter, const QRectF &rect) const {
 
     painter->save();
 
+    // Clip to circle boundary
+    QPainterPath clipPath;
+    clipPath.addEllipse(rect);
+    painter->setClipPath(clipPath);
+
     QPen gridPen(QColor(0, 0, 0, 100)); // Semi-transparent black
     gridPen.setWidthF(0.5);
     painter->setPen(gridPen);
 
     const QPointF center = rect.center();
     const qreal radius = rect.width() / 2.0;
-    const double frequency = material_model_->grid_frequency();
+    const double freqRadial = material_model_->grid_frequency_x(); // Number of radial lines
+    const double freqConcentric = material_model_->grid_frequency_y(); // Number of concentric circles
 
-    // Frequency is "lines per 100px", so calculate spacing based on radius
-    // For radial lines: number of lines = frequency * (radius / 100) * some multiplier
-    // For circles: spacing = 100 / frequency
-    const qreal spacing = 100.0 / frequency; // Distance between concentric circles in pixels
-
-    // Draw radial lines (from center to edge) - more lines for larger circles
-    const int numRadialLines = qMax(8, static_cast<int>(frequency * (radius / 100.0) * 2));
+    // Draw radial lines
+    const int numRadialLines = static_cast<int>(freqRadial);
     for (int i = 0; i < numRadialLines; ++i) {
         const qreal angle = (360.0 * i) / numRadialLines;
         const qreal radians = qDegreesToRadians(angle);
@@ -161,7 +163,8 @@ void CircleItem::draw_radial_grid(QPainter *painter, const QRectF &rect) const {
         painter->drawLine(center, endPoint);
     }
 
-    // Draw concentric circles with spacing based on frequency
+    // Draw concentric circles
+    const qreal spacing = radius / freqConcentric;
     qreal currentRadius = spacing;
     while (currentRadius < radius) {
         painter->drawEllipse(center, currentRadius, currentRadius);

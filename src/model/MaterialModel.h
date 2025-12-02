@@ -7,8 +7,7 @@ class MaterialModel : public ModelObject {
 public:
     enum class GridType {
         None,      // No grid
-        Radial,    // Radial grid (converges to center) - for circles and ellipses
-        Internal   // Internal grid (fills the object) - for future use
+        Internal   // Internal grid (fills the object)
     };
 
     explicit MaterialModel(const Color &color = {});
@@ -19,12 +18,21 @@ public:
     GridType grid_type() const { return grid_type_; }
     void set_grid_type(GridType type);
 
-    double grid_frequency() const { return grid_frequency_; }
-    void set_grid_frequency(double frequency);
+    // For rectangle: x = horizontal cells, y = vertical cells
+    // For circle/ellipse: x = radial lines, y = concentric circles
+    double grid_frequency_x() const { return grid_frequency_x_; }
+    void set_grid_frequency_x(double frequency);
+    double grid_frequency_y() const { return grid_frequency_y_; }
+    void set_grid_frequency_y(double frequency);
+
+    // Legacy method for backward compatibility
+    double grid_frequency() const { return grid_frequency_x_; }
+    void set_grid_frequency(double frequency) { set_grid_frequency_x(frequency); }
 
 private:
     Color color_;
     GridType grid_type_ {GridType::None};
-    double grid_frequency_ {10.0}; // Grid lines per unit (e.g., per 100px)
+    double grid_frequency_x_ {5.0}; // Horizontal cells (rectangle) or radial lines (circle/ellipse)
+    double grid_frequency_y_ {5.0}; // Vertical cells (rectangle) or concentric circles (circle/ellipse)
 };
 
