@@ -2,154 +2,412 @@
 
 #include <QIcon>
 #include <QVariant>
-#include <QGraphicsItem>
-#include <QGraphicsScene>
+#include <QtGlobal>
 
 #include "ui/editor/SubstrateItem.h"
-#include "scene/ISceneObject.h"
+#include "model/MaterialModel.h"
+#include "model/ShapeModel.h"
+#include "model/DocumentModel.h"
 
 ObjectTreeModel::ObjectTreeModel(QObject *parent)
-    : QAbstractItemModel(parent) {}
+    : QAbstractItemModel(parent) {
+  // Initialize root node structure
+  root_node_.data = nullptr;
+  inclusions_node_.data = nullptr;
+  materials_node_.data = nullptr;
+}
 
-ObjectTreeModel::~ObjectTreeModel() = default;
+ObjectTreeModel::~ObjectTreeModel() {
+  if (document_ && document_connection_ != 0) {
+    document_->on_changed().disconnect(document_connection_);
+    document_connection_ = 0;
+  }
+
+  qDeleteAll(shape_nodes_);
+  shape_nodes_.clear();
+  qDeleteAll(material_nodes_);
+  material_nodes_.clear();
+}
 
 void ObjectTreeModel::set_substrate(SubstrateItem *substrate) {
-    beginResetModel();
-    substrate_ = substrate;
-    endResetModel();
+  beginResetModel();
+  substrate_ = substrate;
+  endResetModel();
+}
+
+void ObjectTreeModel::set_document(DocumentModel *document) {
+  if (document_ == document) {
+    return;
+  }
+  if (document_ && document_connection_ != 0) {
+    document_->on_changed().disconnect(document_connection_);
+    document_connection_ = 0;
+  }
+  document_ = document;
+  if (document_) {
+    document_connection_ = document_->on_changed().connect([this](const ModelChange &change){
+      if (change.type != ModelChange::Type::Custom) {
+        return;
+      }
+      qDeleteAll(shape_nodes_);
+      shape_nodes_.clear();
+      qDeleteAll(material_nodes_);
+      material_nodes_.clear();
+      beginResetModel();
+      endResetModel();
+    });
+  }
+  beginResetModel();
+  endResetModel();
+}
+
+TreeNode* ObjectTreeModel::node_from_index(const QModelIndex &index) const {
+  if (!index.isValid()) {
+    return root_node();
+  }
+  return static_cast<TreeNode*>(index.internalPointer());
+}
+
+QModelIndex ObjectTreeModel::create_index_for_node(TreeNode *node, int row, int column) const {
+  return createIndex(row, column, node);
 }
 
 QModelIndex ObjectTreeModel::index(int row, int column, const QModelIndex &parentIdx) const {
-    if (column != 0 || row < 0) return {};
-    if (!parentIdx.isValid()) {
-        int total = (substrate_ ? 1 : 0) + items_.size();
-        if (row < 0 || row >= total) return {};
-        if (substrate_) {
-            if (row == 0) return createIndex(row, column, substrate_);
-            return createIndex(row, column, items_.at(row - 1));
-        } else {
-            return createIndex(row, column, items_.at(row));
-        }
+  if (column != 0 || row < 0) {
+    return {};
+  }
+
+  TreeNode *parentNode = node_from_index(parentIdx);
+
+  if (parentNode == root_node()) {
+    // Root has two children: Inclusions and Materials
+    if (row == 0) {
+      return create_index_for_node(inclusions_node(), 0, 0);
+    } else if (row == 1) {
+      return create_index_for_node(materials_node(), 1, 0);
     }
     return {};
+  }
+
+  if (parentNode == inclusions_node()) {
+    const auto &shapes = document_ ? document_->shapes() : std::vector<std::shared_ptr<ShapeModel>>{};
+    if (!document_) {
+      return {};
+    }
+    if (row >= 0 && row < static_cast<int>(shapes.size())) {
+      ShapeModel *shapePtr = shapes[row].get();
+      TreeNode *itemNode = const_cast<ObjectTreeModel*>(this)->shape_nodes_.value(shapePtr, nullptr);
+      if (!itemNode) {
+        itemNode = new TreeNode(TreeNode::InclusionItem, shapePtr);
+        const_cast<ObjectTreeModel*>(this)->shape_nodes_.insert(shapePtr, itemNode);
+      }
+      return create_index_for_node(itemNode, row, column);
+    }
+    return {};
+  }
+
+  if (parentNode == materials_node()) {
+    if (!document_) {
+      return {};
+    }
+    const auto &materials = document_->materials();
+    if (row >= 0 && row < static_cast<int>(materials.size())) {
+      MaterialModel *materialPtr = materials[row].get();
+      TreeNode *materialNode = const_cast<ObjectTreeModel*>(this)->material_nodes_.value(materialPtr, nullptr);
+      if (!materialNode) {
+        materialNode = new TreeNode(TreeNode::MaterialItem, materialPtr);
+        const_cast<ObjectTreeModel*>(this)->material_nodes_.insert(materialPtr, materialNode);
+      }
+      return create_index_for_node(materialNode, row, column);
+    }
+    return {};
+  }
+
+  return {};
 }
 
 QModelIndex ObjectTreeModel::parent(const QModelIndex &child) const {
-    Q_UNUSED(child);
+  if (!child.isValid()) {
     return {};
+  }
+
+  TreeNode *childNode = node_from_index(child);
+
+  if (childNode == inclusions_node() || childNode == materials_node()) {
+    // These are direct children of root
+    return {};
+  }
+
+  if (childNode->type == TreeNode::InclusionItem) {
+    // Parent is inclusions node
+    return create_index_for_node(inclusions_node(), 0, 0);
+  }
+
+  if (childNode->type == TreeNode::MaterialItem) {
+    // Parent is materials node
+    return create_index_for_node(materials_node(), 1, 0);
+  }
+
+  return {};
 }
 
 int ObjectTreeModel::rowCount(const QModelIndex &parentIdx) const {
-    if (!parentIdx.isValid()) {
-        return (substrate_ ? 1 : 0) + items_.size();
+  TreeNode *parentNode = node_from_index(parentIdx);
+
+  if (parentNode == root_node()) {
+    // Root has 2 children: Inclusions and Materials
+    return 2;
+  }
+
+  if (parentNode == inclusions_node()) {
+    if (document_) {
+      return static_cast<int>(document_->shapes().size());
     }
     return 0;
+  }
+
+  if (parentNode == materials_node()) {
+    if (document_) {
+      return static_cast<int>(document_->materials().size());
+    }
+    return 0;
+  }
+
+  // Leaf nodes have no children
+  return 0;
 }
 
 int ObjectTreeModel::columnCount(const QModelIndex &parentIdx) const {
-    Q_UNUSED(parentIdx);
-    return 1;
+  Q_UNUSED(parentIdx);
+  return 1;
 }
 
 QVariant ObjectTreeModel::data(const QModelIndex &idx, int role) const {
-    if (!idx.isValid() || idx.column() != 0) return {};
-    if (role == Qt::DisplayRole) {
-        auto *item = static_cast<QGraphicsItem*>(idx.internalPointer());
-        if (auto *sceneObj = dynamic_cast<ISceneObject*>(item)) {
-            return sceneObj->name();
-        }
-        return QStringLiteral("Item");
-    }
+  if (!idx.isValid() || idx.column() != 0) {
     return {};
+  }
+
+  TreeNode *node = node_from_index(idx);
+
+  if (role == Qt::DisplayRole) {
+    if (node == inclusions_node()) {
+      return QStringLiteral("Inclusions");
+    }
+    if (node == materials_node()) {
+      return QStringLiteral("Materials");
+    }
+    if (node->type == TreeNode::InclusionItem) {
+      if (auto *shapePtr = static_cast<ShapeModel*>(node->data)) {
+        if (document_) {
+          return QString::fromStdString(shapePtr->name());
+        }
+      }
+      return QStringLiteral("Item");
+    }
+    if (node->type == TreeNode::MaterialItem) {
+      if (auto *material = static_cast<MaterialModel*>(node->data)) {
+        return QString::fromStdString(material->name());
+      }
+      return QStringLiteral("Material");
+    }
+  }
+
+  return {};
 }
 
 Qt::ItemFlags ObjectTreeModel::flags(const QModelIndex &idx) const {
-    if (!idx.isValid()) return Qt::NoItemFlags;
-    return Qt::ItemIsEnabled | Qt::ItemIsSelectable | Qt::ItemIsEditable;
+  if (!idx.isValid()) {
+    return Qt::NoItemFlags;
+  }
+
+  TreeNode *node = node_from_index(idx);
+
+  // Group nodes (Inclusions, Materials) are not editable
+  if (node == inclusions_node() || node == materials_node()) {
+    return Qt::ItemIsEnabled | Qt::ItemIsSelectable;
+  }
+
+  // Items and presets are editable
+  return Qt::ItemIsEnabled | Qt::ItemIsSelectable | Qt::ItemIsEditable;
 }
 
 QVariant ObjectTreeModel::headerData(int section, Qt::Orientation orientation, int role) const {
-    if (orientation == Qt::Horizontal && role == Qt::DisplayRole) {
-        Q_UNUSED(section);
-        return QString(); // no visible header text
-    }
-    return QVariant();
+  if (orientation == Qt::Horizontal && role == Qt::DisplayRole) {
+    Q_UNUSED(section);
+    return QString(); // no visible header text
+  }
+  return QVariant();
 }
 
-QGraphicsItem* ObjectTreeModel::item_from_index(const QModelIndex &index) const {
-    if (!index.isValid()) return nullptr;
-    return static_cast<QGraphicsItem*>(index.internalPointer());
-}
-
-QModelIndex ObjectTreeModel::index_from_item(QGraphicsItem *item) const {
-    if (item == nullptr) return {};
-    if (item == substrate_) {
-        return createIndex(0, 0, item);
-    }
+std::shared_ptr<ShapeModel> ObjectTreeModel::shape_from_index(const QModelIndex &index) const {
+  if (!index.isValid()) {
     return {};
+  }
+  TreeNode *node = node_from_index(index);
+  if (node && node->type == TreeNode::InclusionItem) {
+    return document_ ? document_->shapes().at(index.row()) : nullptr;
+  }
+  return {};
 }
 
-void ObjectTreeModel::add_item(QGraphicsItem *item, const QString &name) {
-    if (!item) return;
-    const int row = rowCount({});
-    beginInsertRows({}, row, row);
-    items_.append(item);
-    names_.insert(item, name);
-    endInsertRows();
-}
-
-QString ObjectTreeModel::get_item_name(QGraphicsItem *item) const {
-    if (auto *sceneObj = dynamic_cast<ISceneObject*>(item)) {
-        return sceneObj->name();
+QModelIndex ObjectTreeModel::index_from_shape(const std::shared_ptr<ShapeModel> &shape) const {
+  if (!document_ || !shape) {
+    return {};
+  }
+  const auto &shapes = document_->shapes();
+  for (int i = 0; i < static_cast<int>(shapes.size()); ++i) {
+    if (shapes[i] == shape) {
+      ShapeModel *shapePtr = shapes[i].get();
+      TreeNode *node = shape_nodes_.value(shapePtr, nullptr);
+      if (!node) {
+        node = new TreeNode(TreeNode::InclusionItem, shapePtr);
+        shape_nodes_.insert(shapePtr, node);
+      }
+      return create_index_for_node(node, i, 0);
     }
-    return QStringLiteral("Item");
+  }
+  return {};
+}
+
+std::shared_ptr<MaterialModel> ObjectTreeModel::material_from_index(const QModelIndex &index) const {
+  if (!index.isValid() || !document_) {
+    return nullptr;
+  }
+  TreeNode *node = node_from_index(index);
+  if (node && node->type == TreeNode::MaterialItem) {
+    auto *materialPtr = static_cast<MaterialModel*>(node->data);
+    for (const auto &material : document_->materials()) {
+      if (material.get() == materialPtr) {
+        return material;
+      }
+    }
+  }
+  return nullptr;
+}
+
+QModelIndex ObjectTreeModel::index_from_material(const std::shared_ptr<MaterialModel> &material) const {
+  if (!material || !document_) {
+    return {};
+  }
+  const auto &materials = document_->materials();
+  for (int i = 0; i < static_cast<int>(materials.size()); ++i) {
+    if (materials[i] == material) {
+      MaterialModel *materialPtr = materials[i].get();
+      TreeNode *node = material_nodes_.value(materialPtr, nullptr);
+      if (!node) {
+        node = new TreeNode(TreeNode::MaterialItem, materialPtr);
+        material_nodes_.insert(materialPtr, node);
+      }
+      return create_index_for_node(node, i, 0);
+    }
+  }
+  return {};
 }
 
 void ObjectTreeModel::clear_items() {
-    if (items_.isEmpty()) {
-        return;
-    }
-    int first = substrate_ ? 1 : 0;
-    int last = first + items_.size() - 1;
-    beginRemoveRows({}, first, last);
-    items_.clear();
-    names_.clear();
-    endRemoveRows();
+  qDeleteAll(shape_nodes_);
+  shape_nodes_.clear();
+  beginResetModel();
+  endResetModel();
+}
+
+std::shared_ptr<MaterialModel> ObjectTreeModel::create_material(const QString &name) {
+  if (!document_) {
+    return nullptr;
+  }
+  return document_->create_material({}, name.toStdString());
+}
+
+void ObjectTreeModel::remove_material(const std::shared_ptr<MaterialModel> &material) {
+  if (!document_ || !material) {
+    return;
+  }
+  document_->remove_material(material);
+  if (auto *node = material_nodes_.take(material.get())) {
+    delete node;
+  }
+}
+
+void ObjectTreeModel::clear_materials() {
+  if (!document_) {
+    return;
+  }
+  document_->clear_materials();
+  qDeleteAll(material_nodes_);
+  material_nodes_.clear();
 }
 
 bool ObjectTreeModel::setData(const QModelIndex &index, const QVariant &value, int role) {
-    if (!index.isValid() || role != Qt::EditRole) return false;
-    auto *item = item_from_index(index);
-    if (!item) return false;
+  if (!index.isValid() || role != Qt::EditRole) {
+    return false;
+  }
 
-    if (auto *sceneObj = dynamic_cast<ISceneObject*>(item)) {
-        sceneObj->set_name(value.toString());
+  TreeNode *node = node_from_index(index);
+
+  QString newName = value.toString().trimmed();
+  if (newName.isEmpty()) {
+    return false; // Reject empty names
+  }
+
+  if (node->type == TreeNode::InclusionItem) {
+    if (auto *shapePtr = static_cast<ShapeModel*>(node->data)) {
+      if (document_) {
+        shapePtr->set_name(newName.toStdString());
         emit dataChanged(index, index, {Qt::DisplayRole});
         return true;
+      }
     }
-    return false;
+  } else if (node->type == TreeNode::MaterialItem) {
+    if (auto *material = static_cast<MaterialModel*>(node->data)) {
+      material->set_name(newName.toStdString());
+      emit dataChanged(index, index, {Qt::DisplayRole});
+      return true;
+    }
+  }
+
+  return false;
 }
 
 bool ObjectTreeModel::removeRows(int row, int count, const QModelIndex &parent) {
-    if (count <= 0) return false;
-    if (parent.isValid()) return false; // flat list for now
-    int total = rowCount({});
-    if (row < 0 || row + count > total) return false;
-    int first = row;
-    int last = row + count - 1;
-    // Protect substrate at row 0
-    if (substrate_ && first == 0) return false;
-    beginRemoveRows(parent, first, last);
-    for (int r = last; r >= first; --r) {
-        QGraphicsItem *it = substrate_ ? items_.at(r - 1) : items_.at(r);
-        names_.remove(it);
-    // Defer to item's scene if available
-    if (auto *s = it->scene()) { s->removeItem(it); }
-        delete it;
-        if (substrate_) items_.removeAt(r - 1); else items_.removeAt(r);
+  if (count <= 0) {
+    return false;
+  }
+
+  TreeNode *parentNode = node_from_index(parent);
+
+  if (parentNode == inclusions_node() && document_) {
+    const auto &shapes = document_->shapes();
+    if (row < 0 || row + count > static_cast<int>(shapes.size())) {
+      return false;
     }
-    endRemoveRows();
+    for (int r = 0; r < count; ++r) {
+      auto shape = shapes[row];
+      document_->remove_shape(shape);
+      if (shape) {
+        if (auto node = shape_nodes_.take(shape.get())) {
+      delete node;
+        }
+      }
+    }
     return true;
+  }
+
+  if (parentNode == materials_node() && document_) {
+    const auto &materials = document_->materials();
+    if (row < 0 || row + count > static_cast<int>(materials.size())) {
+      return false;
+    }
+    for (int r = 0; r < count; ++r) {
+      auto material = materials[row];
+      document_->remove_material(material);
+      if (auto *node = material_nodes_.take(material.get())) {
+      delete node;
+      }
+    }
+    beginResetModel();
+    endResetModel();
+    return true;
+  }
+
+  return false;
 }
-
-

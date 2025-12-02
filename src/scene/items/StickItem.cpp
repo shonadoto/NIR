@@ -1,13 +1,15 @@
 #include "StickItem.h"
 
-#include <QColorDialog>
+#include <QColor>
 #include <QDoubleSpinBox>
 #include <QFormLayout>
 #include <QPen>
-#include <QPushButton>
 #include <QJsonObject>
 #include <QJsonArray>
+#include <QVariant>
+#include <QPainter>
 #include <cmath>
+#include <algorithm>
 
 namespace {
 constexpr double kMinLengthPx = 1.0;
@@ -24,6 +26,13 @@ StickItem::StickItem(const QLineF &line, QGraphicsItem *parent)
     p.setWidthF(2.0);
     setPen(p);
     setTransformOriginPoint(boundingRect().center());
+}
+
+void StickItem::set_name(const QString &name) {
+    QString trimmed = name.trimmed();
+    if (!trimmed.isEmpty()) {
+        name_ = trimmed;
+    }
 }
 
 QWidget* StickItem::create_properties_widget(QWidget *parent) {
@@ -45,6 +54,7 @@ QWidget* StickItem::create_properties_widget(QWidget *parent) {
             l.setP2(QPointF(l.x1() + l.dx()*scale, l.y1() + l.dy()*scale));
             setLine(l);
             setTransformOriginPoint(boundingRect().center());
+            notify_geometry_changed();
         }
     });
 
@@ -56,21 +66,11 @@ QWidget* StickItem::create_properties_widget(QWidget *parent) {
     rotationSpin->setValue(rotation());
     QObject::connect(rotationSpin, QOverload<double>::of(&QDoubleSpinBox::valueChanged), widget, [this, rotationSpin]{
         setRotation(rotationSpin->value());
-    });
-
-    auto *colorBtn = new QPushButton("Choose Color", widget);
-    QObject::connect(colorBtn, &QPushButton::clicked, widget, [this, colorBtn]{
-        QColor c = QColorDialog::getColor(pen().color(), colorBtn, "Choose Line Color", QColorDialog::ShowAlphaChannel);
-        if (c.isValid()) {
-            QPen p = pen();
-            p.setColor(c);
-            setPen(p);
-        }
+        notify_geometry_changed();
     });
 
     form->addRow("Length:", lengthSpin);
     form->addRow("Rotation:", rotationSpin);
-    form->addRow("Color:", colorBtn);
 
     return widget;
 }
@@ -118,5 +118,40 @@ void StickItem::from_json(const QJsonObject &json) {
         }
         setPen(p);
     }
+}
+
+void StickItem::set_geometry_changed_callback(std::function<void()> callback) {
+    geometry_changed_callback_ = std::move(callback);
+}
+
+void StickItem::clear_geometry_changed_callback() {
+    geometry_changed_callback_ = nullptr;
+}
+
+void StickItem::notify_geometry_changed() const {
+    if (geometry_changed_callback_) {
+        geometry_changed_callback_();
+    }
+}
+
+QVariant StickItem::itemChange(GraphicsItemChange change, const QVariant &value) {
+    if (change == ItemPositionHasChanged || change == ItemRotationHasChanged) {
+        notify_geometry_changed();
+    }
+    return QGraphicsLineItem::itemChange(change, value);
+}
+
+void StickItem::paint(QPainter *painter, const QStyleOptionGraphicsItem *option, QWidget *widget) {
+    painter->save();
+    QPen fill_pen = pen();
+    const qreal fill_width = std::max(1.0, fill_pen.widthF());
+    QPen border_pen = fill_pen;
+    border_pen.setColor(fill_pen.color().darker(160));
+    border_pen.setWidthF(fill_width + 2.0);
+    painter->setPen(border_pen);
+    QGraphicsLineItem::paint(painter, option, widget);
+    painter->setPen(fill_pen);
+    QGraphicsLineItem::paint(painter, option, widget);
+    painter->restore();
 }
 

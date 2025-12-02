@@ -7,10 +7,16 @@ set(SOURCES
     ui/panels/ObjectsBar.cpp
     ui/panels/PropertiesBar.cpp
     ui/editor/EditorArea.cpp
+    ui/bindings/ShapeModelBinder.cpp
     ui/editor/SubstrateItem.cpp
     ui/editor/SubstrateDialog.cpp
     ui/sidebar/SideBarWidget.cpp
     model/ObjectTreeModel.cpp
+    model/DocumentModel.cpp
+    model/core/ModelObject.cpp
+    model/MaterialModel.cpp
+    model/ShapeModel.cpp
+    model/SubstrateModel.cpp
     scene/items/RectangleItem.cpp
     scene/items/EllipseItem.cpp
     scene/items/CircleItem.cpp
@@ -26,10 +32,19 @@ set(HEADERS
     ui/panels/ObjectsBar.h
     ui/panels/PropertiesBar.h
     ui/editor/EditorArea.h
+    ui/bindings/ShapeModelBinder.h
+    ui/utils/ColorUtils.h
     ui/editor/SubstrateItem.h
     ui/editor/SubstrateDialog.h
     ui/sidebar/SideBarWidget.h
     model/ObjectTreeModel.h
+    model/DocumentModel.h
+    model/core/Signal.h
+    model/core/ModelTypes.h
+    model/core/ModelObject.h
+    model/MaterialModel.h
+    model/ShapeModel.h
+    model/SubstrateModel.h
     scene/ISceneObject.h
     scene/items/RectangleItem.h
     scene/items/EllipseItem.h

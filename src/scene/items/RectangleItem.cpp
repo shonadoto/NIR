@@ -2,15 +2,14 @@
 
 #include <QBrush>
 #include <QColor>
-#include <QColorDialog>
 #include <QDoubleSpinBox>
 #include <QFormLayout>
 #include <QPen>
-#include <QPushButton>
 #include <QVBoxLayout>
 #include <QWidget>
 #include <QJsonObject>
 #include <QJsonArray>
+#include <QVariant>
 
 namespace {
 constexpr double kMinSizePx = 1.0;
@@ -28,6 +27,13 @@ RectangleItem::RectangleItem(const QRectF &rect, QGraphicsItem *parent)
     setTransformOriginPoint(boundingRect().center());
 }
 
+void RectangleItem::set_name(const QString &name) {
+    QString trimmed = name.trimmed();
+    if (!trimmed.isEmpty()) {
+        name_ = trimmed;
+    }
+}
+
 QWidget* RectangleItem::create_properties_widget(QWidget *parent) {
     auto *widget = new QWidget(parent);
     auto *form = new QFormLayout(widget);
@@ -42,6 +48,7 @@ QWidget* RectangleItem::create_properties_widget(QWidget *parent) {
         r.setWidth(widthSpin->value());
         setRect(r);
         setTransformOriginPoint(boundingRect().center());
+        notify_geometry_changed();
     });
 
     auto *heightSpin = new QDoubleSpinBox(widget);
@@ -53,6 +60,7 @@ QWidget* RectangleItem::create_properties_widget(QWidget *parent) {
         r.setHeight(heightSpin->value());
         setRect(r);
         setTransformOriginPoint(boundingRect().center());
+        notify_geometry_changed();
     });
 
     auto *rotationSpin = new QDoubleSpinBox(widget);
@@ -63,20 +71,12 @@ QWidget* RectangleItem::create_properties_widget(QWidget *parent) {
     rotationSpin->setValue(rotation());
     QObject::connect(rotationSpin, QOverload<double>::of(&QDoubleSpinBox::valueChanged), widget, [this, rotationSpin]{
         setRotation(rotationSpin->value());
-    });
-
-    auto *colorBtn = new QPushButton("Choose Color", widget);
-    QObject::connect(colorBtn, &QPushButton::clicked, widget, [this, colorBtn]{
-        QColor c = QColorDialog::getColor(brush().color(), colorBtn, "Choose Fill Color", QColorDialog::ShowAlphaChannel);
-        if (c.isValid()) {
-            setBrush(QBrush(c));
-        }
+        notify_geometry_changed();
     });
 
     form->addRow("Width:", widthSpin);
     form->addRow("Height:", heightSpin);
     form->addRow("Rotation:", rotationSpin);
-    form->addRow("Color:", colorBtn);
 
     return widget;
 }
@@ -116,5 +116,26 @@ void RectangleItem::from_json(const QJsonObject &json) {
         QJsonArray c = json["fill_color"].toArray();
         setBrush(QBrush(QColor(c[0].toInt(), c[1].toInt(), c[2].toInt(), c[3].toInt())));
     }
+}
+
+void RectangleItem::set_geometry_changed_callback(std::function<void()> callback) {
+    geometry_changed_callback_ = std::move(callback);
+}
+
+void RectangleItem::clear_geometry_changed_callback() {
+    geometry_changed_callback_ = nullptr;
+}
+
+void RectangleItem::notify_geometry_changed() const {
+    if (geometry_changed_callback_) {
+        geometry_changed_callback_();
+    }
+}
+
+QVariant RectangleItem::itemChange(GraphicsItemChange change, const QVariant &value) {
+    if (change == ItemPositionHasChanged || change == ItemRotationHasChanged) {
+        notify_geometry_changed();
+    }
+    return QGraphicsRectItem::itemChange(change, value);
 }
 

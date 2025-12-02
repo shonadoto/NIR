@@ -2,13 +2,12 @@
 
 #include <QBrush>
 #include <QColor>
-#include <QColorDialog>
 #include <QDoubleSpinBox>
 #include <QFormLayout>
 #include <QPen>
-#include <QPushButton>
 #include <QJsonObject>
 #include <QJsonArray>
+#include <QVariant>
 
 namespace {
 constexpr double kMinRadiusPx = 1.0;
@@ -26,6 +25,13 @@ CircleItem::CircleItem(qreal radius, QGraphicsItem *parent)
     setTransformOriginPoint(boundingRect().center());
 }
 
+void CircleItem::set_name(const QString &name) {
+    QString trimmed = name.trimmed();
+    if (!trimmed.isEmpty()) {
+        name_ = trimmed;
+    }
+}
+
 QWidget* CircleItem::create_properties_widget(QWidget *parent) {
     auto *widget = new QWidget(parent);
     auto *form = new QFormLayout(widget);
@@ -39,6 +45,7 @@ QWidget* CircleItem::create_properties_widget(QWidget *parent) {
         qreal r = radiusSpin->value();
         setRect(QRectF(-r, -r, 2*r, 2*r));
         setTransformOriginPoint(boundingRect().center());
+        notify_geometry_changed();
     });
 
     auto *rotationSpin = new QDoubleSpinBox(widget);
@@ -49,19 +56,11 @@ QWidget* CircleItem::create_properties_widget(QWidget *parent) {
     rotationSpin->setValue(rotation());
     QObject::connect(rotationSpin, QOverload<double>::of(&QDoubleSpinBox::valueChanged), widget, [this, rotationSpin]{
         setRotation(rotationSpin->value());
-    });
-
-    auto *colorBtn = new QPushButton("Choose Color", widget);
-    QObject::connect(colorBtn, &QPushButton::clicked, widget, [this, colorBtn]{
-        QColor c = QColorDialog::getColor(brush().color(), colorBtn, "Choose Fill Color", QColorDialog::ShowAlphaChannel);
-        if (c.isValid()) {
-            setBrush(QBrush(c));
-        }
+        notify_geometry_changed();
     });
 
     form->addRow("Radius:", radiusSpin);
     form->addRow("Rotation:", rotationSpin);
-    form->addRow("Color:", colorBtn);
 
     return widget;
 }
@@ -98,5 +97,26 @@ void CircleItem::from_json(const QJsonObject &json) {
         QJsonArray c = json["fill_color"].toArray();
         setBrush(QBrush(QColor(c[0].toInt(), c[1].toInt(), c[2].toInt(), c[3].toInt())));
     }
+}
+
+void CircleItem::set_geometry_changed_callback(std::function<void()> callback) {
+    geometry_changed_callback_ = std::move(callback);
+}
+
+void CircleItem::clear_geometry_changed_callback() {
+    geometry_changed_callback_ = nullptr;
+}
+
+void CircleItem::notify_geometry_changed() const {
+    if (geometry_changed_callback_) {
+        geometry_changed_callback_();
+    }
+}
+
+QVariant CircleItem::itemChange(GraphicsItemChange change, const QVariant &value) {
+    if (change == ItemPositionHasChanged || change == ItemRotationHasChanged) {
+        notify_geometry_changed();
+    }
+    return QGraphicsEllipseItem::itemChange(change, value);
 }
 
