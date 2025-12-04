@@ -26,6 +26,7 @@ public:
     void set_name(const QString &name) override;
     void set_geometry_changed_callback(std::function<void()> callback) override { geometry_callback_ = std::move(callback); }
     void clear_geometry_changed_callback() override { geometry_callback_ = nullptr; }
+    void set_material_model(class MaterialModel *) override {}
 
 private:
     QSizeF size_;

@@ -155,6 +155,12 @@ bool ProjectSerializer::save_to_file(const QString &filename, DocumentModel *doc
         QJsonObject materialObj;
         materialObj["name"] = QString::fromStdString(material->name());
         materialObj["color"] = color_to_json(material->color());
+        // Save grid settings
+        materialObj["grid_type"] = static_cast<int>(material->grid_type());
+        materialObj["grid_frequency_x"] = material->grid_frequency_x();
+        materialObj["grid_frequency_y"] = material->grid_frequency_y();
+        // Backward compatibility
+        materialObj["grid_frequency"] = material->grid_frequency_x();
         materials.append(materialObj);
     }
     root["materials"] = materials;
@@ -174,10 +180,16 @@ bool ProjectSerializer::save_to_file(const QString &filename, DocumentModel *doc
         obj["material_mode"] = shape->material_mode() == ShapeModel::MaterialMode::Preset
             ? QStringLiteral("preset")
             : QStringLiteral("custom");
-        if (shape->material()) {
+        if (shape->material_mode() == ShapeModel::MaterialMode::Preset && shape->material()) {
             obj["material_name"] = QString::fromStdString(shape->material()->name());
-        } else {
-            obj["custom_color"] = color_to_json(shape->custom_color());
+        } else if (shape->material()) {
+            // Custom material - save color and grid settings
+            obj["custom_color"] = color_to_json(shape->material()->color());
+            obj["grid_type"] = static_cast<int>(shape->material()->grid_type());
+            obj["grid_frequency_x"] = shape->material()->grid_frequency_x();
+            obj["grid_frequency_y"] = shape->material()->grid_frequency_y();
+            // Backward compatibility
+            obj["grid_frequency"] = shape->material()->grid_frequency_x();
         }
         shapes.append(obj);
     }
@@ -256,6 +268,29 @@ bool ProjectSerializer::load_from_file(const QString &filename, DocumentModel *d
             ? color_from_json(materialObj["color"].toArray())
             : color_from_json(materialObj["fill_color"].toArray());
         auto material = document->create_material(color, name.toStdString());
+
+        // Load grid settings
+        if (materialObj.contains("grid_type")) {
+            int gridTypeValue = materialObj["grid_type"].toInt();
+            // Handle backward compatibility: old Radial (1) becomes Internal (1)
+            MaterialModel::GridType gridType = static_cast<MaterialModel::GridType>(gridTypeValue);
+            // Ensure only valid values (0 or 1)
+            if (gridTypeValue > 1) {
+                gridType = MaterialModel::GridType::None;
+            }
+            material->set_grid_type(gridType);
+        }
+        // Load grid frequency (new format with x and y, or old format for backward compatibility)
+        if (materialObj.contains("grid_frequency_x") && materialObj.contains("grid_frequency_y")) {
+            material->set_grid_frequency_x(materialObj["grid_frequency_x"].toDouble());
+            material->set_grid_frequency_y(materialObj["grid_frequency_y"].toDouble());
+        } else if (materialObj.contains("grid_frequency")) {
+            // Backward compatibility: use old single value for both x and y
+            double freq = materialObj["grid_frequency"].toDouble();
+            material->set_grid_frequency_x(freq);
+            material->set_grid_frequency_y(freq);
+        }
+
         materials_by_name.emplace(name.toStdString(), material);
     }
 
@@ -283,11 +318,34 @@ bool ProjectSerializer::load_from_file(const QString &filename, DocumentModel *d
                 } else {
                     shape->clear_material();
                 }
-            } else if (obj.contains("custom_color") || obj.contains("fill_color")) {
-                shape->clear_material();
-                shape->set_custom_color(custom_color_from_object(obj));
             } else {
+                // Custom material
                 shape->clear_material();
+                if (obj.contains("custom_color") || obj.contains("fill_color")) {
+                    shape->material()->set_color(custom_color_from_object(obj));
+                }
+                // Load grid settings
+                if (obj.contains("grid_type")) {
+                    int gridTypeValue = obj["grid_type"].toInt();
+                    // Handle backward compatibility: old Radial (1) becomes Internal (1)
+                    // None = 0, Internal = 1 (Radial was also 1, so it maps correctly)
+                    MaterialModel::GridType gridType = static_cast<MaterialModel::GridType>(gridTypeValue);
+                    // Ensure only valid values (0 or 1)
+                    if (gridTypeValue > 1) {
+                        gridType = MaterialModel::GridType::None;
+                    }
+                    shape->material()->set_grid_type(gridType);
+                }
+                // Load grid frequency (new format with x and y, or old format for backward compatibility)
+                if (obj.contains("grid_frequency_x") && obj.contains("grid_frequency_y")) {
+                    shape->material()->set_grid_frequency_x(obj["grid_frequency_x"].toDouble());
+                    shape->material()->set_grid_frequency_y(obj["grid_frequency_y"].toDouble());
+                } else if (obj.contains("grid_frequency")) {
+                    // Backward compatibility: use old single value for both x and y
+                    double freq = obj["grid_frequency"].toDouble();
+                    shape->material()->set_grid_frequency_x(freq);
+                    shape->material()->set_grid_frequency_y(freq);
+                }
             }
         }
     }

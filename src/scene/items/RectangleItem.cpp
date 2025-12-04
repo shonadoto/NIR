@@ -10,6 +10,9 @@
 #include <QJsonObject>
 #include <QJsonArray>
 #include <QVariant>
+#include <QPainter>
+#include <QStyleOptionGraphicsItem>
+#include "model/MaterialModel.h"
 
 namespace {
 constexpr double kMinSizePx = 1.0;
@@ -130,6 +133,58 @@ void RectangleItem::notify_geometry_changed() const {
     if (geometry_changed_callback_) {
         geometry_changed_callback_();
     }
+}
+
+void RectangleItem::set_material_model(MaterialModel *material) {
+    material_model_ = material;
+    update(); // Trigger repaint to show/hide grid
+}
+
+void RectangleItem::paint(QPainter *painter, const QStyleOptionGraphicsItem *option, QWidget *widget) {
+    // Draw the base rectangle first
+    QGraphicsRectItem::paint(painter, option, widget);
+
+    // Draw grid if material has Internal grid enabled
+    if (material_model_ && material_model_->grid_type() == MaterialModel::GridType::Internal) {
+        draw_internal_grid(painter, rect());
+    }
+}
+
+void RectangleItem::draw_internal_grid(QPainter *painter, const QRectF &rect) const {
+    if (!material_model_) {
+        return;
+    }
+
+    painter->save();
+
+    // Draw only lines, no fill
+    painter->setBrush(Qt::NoBrush);
+    QPen gridPen(QColor(0, 0, 0, 255)); // Black lines
+    gridPen.setWidthF(0.5);
+    painter->setPen(gridPen);
+
+    const double freqX = material_model_->grid_frequency_x(); // Horizontal cells
+    const double freqY = material_model_->grid_frequency_y(); // Vertical cells
+    
+    // Calculate spacing for horizontal and vertical lines separately
+    const qreal spacingX = rect.width() / freqX;
+    const qreal spacingY = rect.height() / freqY;
+
+    // Draw vertical lines (horizontal spacing)
+    qreal x = rect.left() + spacingX;
+    while (x <= rect.right()) {
+        painter->drawLine(QPointF(x, rect.top()), QPointF(x, rect.bottom()));
+        x += spacingX;
+    }
+
+    // Draw horizontal lines (vertical spacing)
+    qreal y = rect.top() + spacingY;
+    while (y <= rect.bottom()) {
+        painter->drawLine(QPointF(rect.left(), y), QPointF(rect.right(), y));
+        y += spacingY;
+    }
+
+    painter->restore();
 }
 
 QVariant RectangleItem::itemChange(GraphicsItemChange change, const QVariant &value) {

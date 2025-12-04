@@ -8,6 +8,7 @@ class QLabel;
 class QLineEdit;
 class QComboBox;
 class QPushButton;
+class QDoubleSpinBox;
 class ISceneObject;
 class MaterialModel;
 class ObjectTreeModel;
@@ -37,9 +38,11 @@ signals:
 private:
   void setup_type_selector();
   void setup_material_selector();
+  void setup_grid_controls();
   bool is_inclusion_item() const;
   void update_material_ui();
   void update_material_color_button();
+  void update_grid_controls();
   bool can_edit_material_color() const;
 
   QVBoxLayout *layout_ {nullptr};
@@ -48,6 +51,10 @@ private:
   QComboBox *type_combo_ {nullptr};
   QComboBox *material_combo_ {nullptr};
   QPushButton *material_color_btn_ {nullptr};
+  QLabel *grid_type_label_ {nullptr};
+  QComboBox *grid_type_combo_ {nullptr};
+  QDoubleSpinBox *grid_frequency_x_spin_ {nullptr};
+  QDoubleSpinBox *grid_frequency_y_spin_ {nullptr};
   QWidget *content_widget_ {nullptr};
   ISceneObject *current_item_ {nullptr};
   MaterialModel *current_material_ {nullptr};

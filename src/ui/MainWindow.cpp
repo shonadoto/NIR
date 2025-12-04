@@ -9,7 +9,6 @@
 #include <QGraphicsScene>
 #include <QLineF>
 #include <QPen>
-#include <algorithm>
 #include <QItemSelectionModel>
 #include "ui/editor/EditorArea.h"
 #include "ui/panels/ObjectsBar.h"
@@ -20,6 +19,7 @@
 #include "model/ObjectTreeModel.h"
 #include "model/MaterialModel.h"
 #include "model/ShapeModel.h"
+#include "model/ShapeSizeConverter.h"
 #include "model/DocumentModel.h"
 #include "model/SubstrateModel.h"
 #include "model/core/ModelTypes.h"
@@ -186,8 +186,8 @@ void MainWindow::createActivityObjectsBarAndEditor() {
       auto model = shape_binder_->model_for(dynamic_cast<ISceneObject*>(current_selected_item_));
       if (model) {
         QModelIndex idx = tree_model_->index_from_shape(model);
-        if (idx.isValid()) {
-          tree_model_->setData(idx, new_name, Qt::EditRole);
+    if (idx.isValid()) {
+      tree_model_->setData(idx, new_name, Qt::EditRole);
         }
       }
     }
@@ -211,100 +211,29 @@ void MainWindow::createActivityObjectsBarAndEditor() {
   });
 
   // Connect PropertiesBar type change to replace object
-  connect(properties_bar_, &PropertiesBar::type_changed, this, [this](ISceneObject *old_item, const QString &new_type){
-    if (!old_item || !editor_area_ || !tree_model_) return;
-    auto *old_graphics_item = dynamic_cast<QGraphicsItem*>(old_item);
-    if (!old_graphics_item) return;
-
-    auto *scene = editor_area_->scene();
-    if (!scene) return;
-
-    std::shared_ptr<ShapeModel> shapeModel;
-    if (shape_binder_) {
-      shapeModel = shape_binder_->model_for(old_item);
-    }
-    if (!shapeModel) {
-      return;
-    }
-
-    auto to_shape_type = [](const QString &type) {
-      if (type == "circle") return ShapeModel::ShapeType::Circle;
-      if (type == "ellipse") return ShapeModel::ShapeType::Ellipse;
-      if (type == "stick") return ShapeModel::ShapeType::Stick;
-      return ShapeModel::ShapeType::Rectangle;
-    };
-
-    ShapeModel::ShapeType targetType = to_shape_type(new_type);
-    if (shapeModel->type() == targetType) {
-      return;
-    }
-    shapeModel->set_type(targetType);
-
-    QPointF position = old_graphics_item->pos();
-    qreal rotation = old_graphics_item->rotation();
-    QString item_name = old_item->name();
-    QSizeF old_size = old_graphics_item->boundingRect().size();
-
-    auto update_model_size = [&](ShapeModel::ShapeType type){
-      switch (type) {
-        case ShapeModel::ShapeType::Circle: {
-          double diameter = std::max(old_size.width(), old_size.height());
-          if (diameter < 1.0) diameter = 80.0;
-          shapeModel->set_size(Size2D{diameter, diameter});
-          break;
-        }
-        case ShapeModel::ShapeType::Rectangle:
-        case ShapeModel::ShapeType::Ellipse: {
-          QSizeF sz = old_size;
-          if (sz.width() < 1.0) sz.setWidth(100.0);
-          if (sz.height() < 1.0) sz.setHeight(60.0);
-          shapeModel->set_size(Size2D{sz.width(), sz.height()});
-          break;
-        }
-        case ShapeModel::ShapeType::Stick: {
-          double length = std::max(old_size.width(), old_size.height());
-          if (length < 1.0) length = 100.0;
-          constexpr double kDefaultThickness = 2.0;
-          shapeModel->set_size(Size2D{length, kDefaultThickness});
-          break;
-        }
-      }
-    };
-    update_model_size(targetType);
-
-    std::unique_ptr<ISceneObject> new_item_ptr(create_item_for_shape(shapeModel));
-    if (!new_item_ptr) return;
-    auto *new_item = new_item_ptr.release();
-    auto *new_graphics_item = dynamic_cast<QGraphicsItem*>(new_item);
-    if (!new_graphics_item) {
-      delete new_item;
-      return;
-    }
-
-    new_item->set_name(item_name);
-    new_graphics_item->setPos(position);
-    new_graphics_item->setRotation(rotation);
-    scene->addItem(new_graphics_item);
-
-    if (shape_binder_) {
-      shape_binder_->attach_shape(new_item, shapeModel);
-      shape_binder_->unbind_shape(old_item);
-    }
-
-    scene->removeItem(old_graphics_item);
-    delete old_graphics_item;
-
-    current_selected_item_ = new_graphics_item;
-    if (properties_bar_) {
-      properties_bar_->set_selected_item(new_item, item_name);
-    }
-  });
+  connect(properties_bar_, &PropertiesBar::type_changed, this, &MainWindow::change_shape_type);
   // Bind model to the Objects bar (first sidebar entry)
   // We know SideBarWidget registered the "objects" page as index 0
   // so we can safely find the first page's widget and cast to ObjectsBar
   // Alternatively SideBarWidget could expose a getter; for now we search children
-  // PropertiesBar now connects directly to model signals, so no need for dataChanged handler here
-  // The models (MaterialModel, ShapeModel) emit signals when changed, and PropertiesBar listens to them
+  // Connect model dataChanged to PropertiesBar update
+  connect(tree_model_, &QAbstractItemModel::dataChanged, this, [this](const QModelIndex &topLeft, const QModelIndex &, const QVector<int> &roles){
+    if (roles.contains(Qt::DisplayRole) || roles.isEmpty()) {
+      auto shapeModel = tree_model_->shape_from_index(topLeft);
+      if (shapeModel && shape_binder_) {
+        auto *item = shape_binder_->item_for(shapeModel);
+      if (item && item == current_selected_item_) {
+          QString name = QString::fromStdString(shapeModel->name());
+        properties_bar_->update_name(name);
+        }
+      }
+      // Check if it's a material node
+      auto material = tree_model_->material_from_index(topLeft);
+      if (material && properties_bar_) {
+        // Could refresh material view if needed
+      }
+    }
+  });
 
   if (auto *objectsBar = side_bar_widget_->findChild<ObjectsBar*>()) {
     objectsBar->set_model(tree_model_);
@@ -317,20 +246,20 @@ void MainWindow::createActivityObjectsBarAndEditor() {
                 auto shapeModel = tree_model_->shape_from_index(current);
                 if (shapeModel && shape_binder_) {
                   auto *item = shape_binder_->item_for(shapeModel);
-                  if (item) {
-                    auto *scene = editor_area_->scene();
-                    if (!scene) return;
-                    scene->clearSelection();
-                    item->setSelected(true);
+                if (item) {
+                  auto *scene = editor_area_->scene();
+                  if (!scene) return;
+                  scene->clearSelection();
+                  item->setSelected(true);
                     current_selected_item_ = item;
-                    if (properties_bar_) {
-                      if (auto *sceneObj = dynamic_cast<ISceneObject*>(item)) {
+                  if (properties_bar_) {
+                    if (auto *sceneObj = dynamic_cast<ISceneObject*>(item)) {
                         QString name = QString::fromStdString(shapeModel->name());
-                        properties_bar_->set_selected_item(sceneObj, name);
-                      }
+                      properties_bar_->set_selected_item(sceneObj, name);
                     }
-                    return;
                   }
+                  return;
+                }
                 }
                 // Check if it's a material
                 auto material = tree_model_->material_from_index(current);
@@ -353,8 +282,8 @@ void MainWindow::createActivityObjectsBarAndEditor() {
           if (shape_binder_) {
             if (auto model = shape_binder_->model_for(dynamic_cast<ISceneObject*>(items.first()))) {
               QModelIndex idx = tree_model_->index_from_shape(model);
-              if (idx.isValid()) {
-                treeView->selectionModel()->setCurrentIndex(idx, QItemSelectionModel::ClearAndSelect);
+          if (idx.isValid()) {
+            treeView->selectionModel()->setCurrentIndex(idx, QItemSelectionModel::ClearAndSelect);
               }
             }
           }
@@ -536,8 +465,7 @@ ISceneObject* MainWindow::create_item_for_shape(const std::shared_ptr<ShapeModel
       const qreal halfLen = static_cast<qreal>(size.width) / 2.0;
       auto *item = new StickItem(QLineF(-halfLen, 0.0, halfLen, 0.0));
       QPen pen = item->pen();
-      double thickness = size.height > 0 ? size.height : pen.widthF();
-      pen.setWidthF(std::clamp(thickness, 2.0, 6.0));
+      pen.setWidthF(ShapeConstants::kStickThickness);
       item->setPen(pen);
       item->set_name(QString::fromStdString(shape->name()));
       return item;
@@ -599,5 +527,145 @@ void MainWindow::rebuild_scene_from_document() {
   }
 
   tree_model_->set_substrate(editor_area_->substrate_item());
+}
+
+ShapeModel::ShapeType MainWindow::string_to_shape_type(const QString &type) const {
+    if (type == "circle") return ShapeModel::ShapeType::Circle;
+    if (type == "ellipse") return ShapeModel::ShapeType::Ellipse;
+    if (type == "stick") return ShapeModel::ShapeType::Stick;
+    return ShapeModel::ShapeType::Rectangle;
+}
+
+Size2D MainWindow::convert_shape_size(ShapeModel::ShapeType from, ShapeModel::ShapeType to, const Size2D &size) const {
+    return ShapeSizeConverter::convert(from, to, size);
+}
+
+void MainWindow::change_shape_type(ISceneObject *old_item, const QString &new_type) {
+    if (!old_item || !editor_area_ || !tree_model_) {
+        return;
+    }
+    
+    auto *old_graphics_item = dynamic_cast<QGraphicsItem*>(old_item);
+    if (!old_graphics_item) {
+        return;
+    }
+
+    auto *scene = editor_area_->scene();
+    if (!scene) {
+        return;
+    }
+
+    std::shared_ptr<ShapeModel> shapeModel;
+    if (shape_binder_) {
+        shapeModel = shape_binder_->model_for(old_item);
+    }
+    if (!shapeModel) {
+        return;
+    }
+
+    ShapeModel::ShapeType targetType = string_to_shape_type(new_type);
+    if (shapeModel->type() == targetType) {
+        return;
+    }
+    
+    // Get current properties before changing type
+    // Calculate center of old item in scene coordinates using sceneBoundingRect for accuracy
+    QPointF oldCenter = old_graphics_item->sceneBoundingRect().center();
+    
+    qreal rotation = old_graphics_item->rotation();
+    QString item_name = old_item->name();
+    Size2D currentModelSize = shapeModel->size();
+    ShapeModel::ShapeType currentType = shapeModel->type();
+    
+    // Convert size and ensure minimum
+    Size2D newSize = convert_shape_size(currentType, targetType, currentModelSize);
+    newSize = ShapeSizeConverter::ensure_minimum(newSize, targetType);
+    
+    // Update model
+    shapeModel->set_type(targetType);
+    shapeModel->set_size(newSize);
+
+    // Replace the item in the scene, preserving center position
+    replace_shape_item(old_item, shapeModel, oldCenter, rotation, item_name);
+}
+
+void MainWindow::replace_shape_item(ISceneObject *old_item, const std::shared_ptr<ShapeModel> &model, 
+                                    const QPointF &centerPosition, qreal rotation, const QString &name) {
+    if (!old_item || !editor_area_ || !model) {
+        return;
+    }
+    
+    auto *old_graphics_item = dynamic_cast<QGraphicsItem*>(old_item);
+    if (!old_graphics_item) {
+        return;
+    }
+    
+    auto *scene = editor_area_->scene();
+    if (!scene) {
+        return;
+    }
+
+    // Create new item (not yet added to scene)
+    std::unique_ptr<ISceneObject> new_item_ptr(create_item_for_shape(model));
+    if (!new_item_ptr) {
+        return; // Failed to create item
+    }
+    
+    auto *new_item = new_item_ptr.release();
+    auto *new_graphics_item = dynamic_cast<QGraphicsItem*>(new_item);
+    if (!new_graphics_item) {
+        delete new_item;
+        return;
+    }
+
+    // Calculate position for new item so its center matches the old center
+    // We need to add item to scene temporarily to get accurate boundingRect
+    // (some items may need scene context for proper boundingRect calculation)
+    scene->addItem(new_graphics_item);
+    QRectF newBoundingRect = new_graphics_item->boundingRect();
+    scene->removeItem(new_graphics_item);
+    
+    // Validate boundingRect
+    if (newBoundingRect.isEmpty() || !newBoundingRect.isValid()) {
+        delete new_item;
+        return; // Invalid bounding rect
+    }
+    
+    // Calculate position: center in scene = pos() + boundingRect().center()
+    // So: pos() = center - boundingRect().center()
+    QPointF newPosition = centerPosition - newBoundingRect.center();
+
+    // Unbind old item first, before removing it
+    if (shape_binder_) {
+        shape_binder_->unbind_shape(old_item);
+    }
+    
+    // Remove old item from scene before adding new one
+    scene->removeItem(old_graphics_item);
+    delete old_graphics_item;
+
+    // Set up new item with calculated position to preserve center
+    new_item->set_name(name);
+    new_graphics_item->setPos(newPosition);
+    new_graphics_item->setRotation(rotation);
+    scene->addItem(new_graphics_item);
+
+    // Update model position before binding to avoid apply_geometry overwriting it
+    if (shape_binder_) {
+        // Convert QPointF to model Point2D (using same conversion as ShapeModelBinder)
+        model->set_position(Point2D{newPosition.x(), newPosition.y()});
+        model->set_rotation_deg(rotation);
+        
+        // Now bind - apply_geometry will use the correct position from model
+        shape_binder_->attach_shape(new_item, model);
+        // Force update to ensure correct rendering
+        new_graphics_item->update();
+    }
+
+    // Update UI
+    current_selected_item_ = new_graphics_item;
+    if (properties_bar_) {
+        properties_bar_->set_selected_item(new_item, name);
+    }
 }
 

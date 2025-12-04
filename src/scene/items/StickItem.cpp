@@ -4,12 +4,14 @@
 #include <QDoubleSpinBox>
 #include <QFormLayout>
 #include <QPen>
+#include <QBrush>
+#include <QPainter>
+#include <QStyleOptionGraphicsItem>
 #include <QJsonObject>
 #include <QJsonArray>
 #include <QVariant>
-#include <QPainter>
 #include <cmath>
-#include <algorithm>
+#include "model/MaterialModel.h"
 
 namespace {
 constexpr double kMinLengthPx = 1.0;
@@ -134,24 +136,38 @@ void StickItem::notify_geometry_changed() const {
     }
 }
 
+void StickItem::set_material_model(MaterialModel *material) {
+    // Stick items don't use grid, but we need to implement the interface
+    (void)material;
+}
+
+QRectF StickItem::boundingRect() const {
+    // Return bounding rect that includes only the line with pen width
+    QRectF rect = QGraphicsLineItem::boundingRect();
+    return rect;
+}
+
+void StickItem::paint(QPainter *painter, const QStyleOptionGraphicsItem *option, QWidget *widget) {
+    Q_UNUSED(option);
+    Q_UNUSED(widget);
+    
+    // Draw only the line - no brush, no fill, no background
+    painter->save();
+    painter->setBrush(Qt::NoBrush);
+    painter->setRenderHint(QPainter::Antialiasing, true);
+    
+    // Draw the line directly with the pen
+    QPen p = pen();
+    painter->setPen(p);
+    painter->drawLine(line());
+    
+    painter->restore();
+}
+
 QVariant StickItem::itemChange(GraphicsItemChange change, const QVariant &value) {
     if (change == ItemPositionHasChanged || change == ItemRotationHasChanged) {
         notify_geometry_changed();
     }
     return QGraphicsLineItem::itemChange(change, value);
-}
-
-void StickItem::paint(QPainter *painter, const QStyleOptionGraphicsItem *option, QWidget *widget) {
-    painter->save();
-    QPen fill_pen = pen();
-    const qreal fill_width = std::max(1.0, fill_pen.widthF());
-    QPen border_pen = fill_pen;
-    border_pen.setColor(fill_pen.color().darker(160));
-    border_pen.setWidthF(fill_width + 2.0);
-    painter->setPen(border_pen);
-    QGraphicsLineItem::paint(painter, option, widget);
-    painter->setPen(fill_pen);
-    QGraphicsLineItem::paint(painter, option, widget);
-    painter->restore();
 }
 

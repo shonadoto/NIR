@@ -47,6 +47,8 @@ void apply_color_to_item(ISceneObject *item, const Color &color) {
             QPen pen = line->pen();
             pen.setColor(qcolor);
             line->setPen(pen);
+            // QGraphicsLineItem doesn't have setBrush, but ensure no fill is applied
+            // StickItem handles this in its paint method
         }
     }
 }
@@ -92,7 +94,9 @@ std::shared_ptr<ShapeModel> ShapeModelBinder::bind_shape(ISceneObject *item) {
     }
 
     auto model = document_.create_shape(type_from_item(item), item->name().toStdString());
-    model->set_custom_color(color_from_item(item));
+    if (model->material()) {
+        model->material()->set_color(color_from_item(item));
+    }
 
     int connection_id = model->on_changed().connect([this, item](const ModelChange &change){
         handle_change(item, change);
@@ -104,9 +108,7 @@ std::shared_ptr<ShapeModel> ShapeModelBinder::bind_shape(ISceneObject *item) {
     item->set_geometry_changed_callback([this, item]{
         on_item_geometry_changed(item);
     });
-    apply_color_to_item(item, model->material_mode() == ShapeModel::MaterialMode::Custom
-                                ? model->custom_color()
-                                : (model->material() ? model->material()->color() : Color{}) );
+    apply_color_to_item(item, model->material() ? model->material()->color() : Color{});
     return model;
 }
 
@@ -128,9 +130,7 @@ std::shared_ptr<ShapeModel> ShapeModelBinder::attach_shape(ISceneObject *item, c
         on_item_geometry_changed(item);
     });
     apply_geometry(item, model);
-    apply_color_to_item(item, model->material_mode() == ShapeModel::MaterialMode::Custom
-                                ? model->custom_color()
-                                : (model->material() ? model->material()->color() : Color{}) );
+    apply_color_to_item(item, model->material() ? model->material()->color() : Color{});
     return model;
 }
 
@@ -193,9 +193,7 @@ void ShapeModelBinder::handle_change(ISceneObject *item, const ModelChange &chan
             update_material_binding(item, bindingIt->second);
             [[fallthrough]];
         case ModelChange::Type::ColorChanged: {
-            Color color = model->material_mode() == ShapeModel::MaterialMode::Preset && model->material()
-                ? model->material()->color()
-                : model->custom_color();
+            Color color = model->material() ? model->material()->color() : Color{};
             apply_color_to_item(item, color);
             break;
         }
@@ -268,10 +266,17 @@ void ShapeModelBinder::update_model_geometry(ISceneObject *item, const std::shar
     model->set_position(to_model_point(graphicsItem->pos()));
     model->set_rotation_deg(graphicsItem->rotation());
 
-    if (auto rectItem = dynamic_cast<QGraphicsRectItem*>(graphicsItem)) {
+    // Check CircleItem first (before QGraphicsEllipseItem) since CircleItem inherits from it
+    if (auto circleItem = dynamic_cast<CircleItem*>(item)) {
+        // Circle: rect().width() is diameter, model stores diameter x diameter
+        QRectF rect = circleItem->rect();
+        const qreal diameter = rect.width(); // For circle, width == height == diameter
+        model->set_size(Size2D{diameter, diameter});
+    } else if (auto rectItem = dynamic_cast<QGraphicsRectItem*>(graphicsItem)) {
         QRectF rect = rectItem->rect();
         model->set_size(Size2D{rect.width(), rect.height()});
     } else if (auto ellipseItem = dynamic_cast<QGraphicsEllipseItem*>(graphicsItem)) {
+        // This handles EllipseItem (not CircleItem, as it's checked above)
         QRectF rect = ellipseItem->rect();
         model->set_size(Size2D{rect.width(), rect.height()});
     } else if (auto lineItem = dynamic_cast<QGraphicsLineItem*>(graphicsItem)) {
@@ -313,6 +318,12 @@ void ShapeModelBinder::apply_geometry(ISceneObject *item, const std::shared_ptr<
         rect.setHeight(size.height);
         rectItem->setRect(rect);
         rectItem->setTransformOriginPoint(rectItem->boundingRect().center());
+    } else if (auto circleItem = dynamic_cast<CircleItem*>(item)) {
+        // Circle: size stores diameter x diameter, rect must be centered at (0,0)
+        const qreal radius = size.width / 2.0;
+        circleItem->setRect(QRectF(-radius, -radius, 2.0 * radius, 2.0 * radius));
+        // Circle is always centered at (0,0), so transform origin is at (0,0) relative to item
+        circleItem->setTransformOriginPoint(QPointF(0, 0));
     } else if (auto ellipseItem = dynamic_cast<QGraphicsEllipseItem*>(graphicsItem)) {
         QRectF rect = ellipseItem->rect();
         rect.setWidth(size.width);
@@ -322,12 +333,13 @@ void ShapeModelBinder::apply_geometry(ISceneObject *item, const std::shared_ptr<
     } else if (auto lineItem = dynamic_cast<QGraphicsLineItem*>(graphicsItem)) {
         const qreal halfLength = size.width / 2.0;
         lineItem->setLine(QLineF(-halfLength, 0.0, halfLength, 0.0));
-        QPen pen = lineItem->pen();
-        if (size.height > 0.0) {
-            pen.setWidthF(size.height);
-        }
-        lineItem->setPen(pen);
         lineItem->setTransformOriginPoint(lineItem->boundingRect().center());
+        // For stick items, keep fixed pen width
+        if (dynamic_cast<StickItem*>(item)) {
+            QPen p = lineItem->pen();
+            p.setWidthF(2.0); // Fixed width for stick
+            lineItem->setPen(p);
+        }
     }
 
     if (it != bindings_.end()) {
