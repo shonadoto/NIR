@@ -157,7 +157,9 @@ void RectangleItem::draw_internal_grid(QPainter *painter, const QRectF &rect) co
 
     painter->save();
 
-    QPen gridPen(QColor(0, 0, 0, 100)); // Semi-transparent black
+    // Draw only lines, no fill
+    painter->setBrush(Qt::NoBrush);
+    QPen gridPen(QColor(0, 0, 0, 255)); // Black lines
     gridPen.setWidthF(0.5);
     painter->setPen(gridPen);
 

@@ -263,8 +263,8 @@ void MainWindow::createActivityObjectsBarAndEditor() {
         case ShapeModel::ShapeType::Stick: {
           double length = std::max(old_size.width(), old_size.height());
           if (length < 1.0) length = 100.0;
-          double thickness = std::max(2.0, std::min(old_size.width(), old_size.height()));
-          shapeModel->set_size(Size2D{length, thickness});
+          // Fixed thickness for stick (not used for rendering, but stored in model)
+          shapeModel->set_size(Size2D{length, 2.0});
           break;
         }
       }
@@ -288,6 +288,10 @@ void MainWindow::createActivityObjectsBarAndEditor() {
     if (shape_binder_) {
       shape_binder_->attach_shape(new_item, shapeModel);
       shape_binder_->unbind_shape(old_item);
+      // Force update for stick items to ensure correct rendering
+      if (targetType == ShapeModel::ShapeType::Stick) {
+        new_graphics_item->update();
+      }
     }
 
     scene->removeItem(old_graphics_item);
@@ -551,7 +555,7 @@ ISceneObject* MainWindow::create_item_for_shape(const std::shared_ptr<ShapeModel
       const qreal halfLen = static_cast<qreal>(size.width) / 2.0;
       auto *item = new StickItem(QLineF(-halfLen, 0.0, halfLen, 0.0));
       QPen pen = item->pen();
-      pen.setWidthF(size.height > 0 ? size.height : pen.widthF());
+      pen.setWidthF(2.0); // Fixed width for stick
       item->setPen(pen);
       item->set_name(QString::fromStdString(shape->name()));
       return item;

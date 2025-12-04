@@ -47,6 +47,8 @@ void apply_color_to_item(ISceneObject *item, const Color &color) {
             QPen pen = line->pen();
             pen.setColor(qcolor);
             line->setPen(pen);
+            // QGraphicsLineItem doesn't have setBrush, but ensure no fill is applied
+            // StickItem handles this in its paint method
         }
     }
 }
@@ -319,6 +321,12 @@ void ShapeModelBinder::apply_geometry(ISceneObject *item, const std::shared_ptr<
         const qreal halfLength = size.width / 2.0;
         lineItem->setLine(QLineF(-halfLength, 0.0, halfLength, 0.0));
         lineItem->setTransformOriginPoint(lineItem->boundingRect().center());
+        // For stick items, keep fixed pen width
+        if (dynamic_cast<StickItem*>(item)) {
+            QPen p = lineItem->pen();
+            p.setWidthF(2.0); // Fixed width for stick
+            lineItem->setPen(p);
+        }
     }
 
     if (it != bindings_.end()) {

@@ -781,6 +781,10 @@ bool PropertiesBar::can_edit_material_color() const {
     if (!current_item_) {
         return false;
     }
+    // Allow editing if custom material is selected (item_material_ is nullptr but current_model_ has custom material)
+    if (current_model_ && current_model_->material_mode() == ShapeModel::MaterialMode::Custom) {
+        return true;
+    }
     return item_material_ == nullptr;
 }
 

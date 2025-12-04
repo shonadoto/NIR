@@ -20,6 +20,8 @@ public:
     void set_material_model(class MaterialModel *material) override;
 
 protected:
+    QRectF boundingRect() const override;
+    void paint(QPainter *painter, const QStyleOptionGraphicsItem *option, QWidget *widget = nullptr) override;
     QVariant itemChange(GraphicsItemChange change, const QVariant &value) override;
 
 private:

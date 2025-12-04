@@ -145,7 +145,10 @@ void CircleItem::draw_radial_grid(QPainter *painter, const QRectF &rect) const {
     clipPath.addEllipse(rect);
     painter->setClipPath(clipPath);
 
-    QPen gridPen(QColor(0, 0, 0, 100)); // Semi-transparent black
+    // Use composition mode that doesn't darken - draw only lines, no fill
+    painter->setCompositionMode(QPainter::CompositionMode_SourceOver);
+    painter->setBrush(Qt::NoBrush); // Ensure no fill
+    QPen gridPen(QColor(0, 0, 0, 255)); // Black lines
     gridPen.setWidthF(0.5);
     painter->setPen(gridPen);
 
