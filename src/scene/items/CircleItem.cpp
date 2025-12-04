@@ -19,6 +19,10 @@ constexpr double kMinRadiusPx = 1.0;
 constexpr double kMaxRadiusPx = 10000.0;
 constexpr double kMinRotationDeg = -360.0;
 constexpr double kMaxRotationDeg = 360.0;
+// Grid ring parameters (as fraction of radius)
+constexpr double kInnerRingStartRatio = 0.5;  // Inner ring starts at 50% of radius
+constexpr double kOuterRingExtendRatio = 0.5; // Outer ring extends 50% of radius beyond boundary
+constexpr double kBoundaryRingMargin = 0.02;  // Margin for boundary ring to avoid overlap (2% of radius)
 }
 
 CircleItem::CircleItem(qreal radius, QGraphicsItem *parent)
@@ -129,52 +133,111 @@ void CircleItem::paint(QPainter *painter, const QStyleOptionGraphicsItem *option
 
     // Draw grid if material has Internal grid enabled (radial for circles)
     if (material_model_ && material_model_->grid_type() == MaterialModel::GridType::Internal) {
-        draw_radial_grid(painter, rect());
+        // Calculate extended rect for grid (includes outer ring)
+        const QRectF baseRect = rect();
+        const qreal radius = baseRect.width() / 2.0;
+        const qreal extend = radius * kOuterRingExtendRatio;
+        const QRectF extendedRect = baseRect.adjusted(-extend, -extend, extend, extend);
+        draw_radial_grid(painter, extendedRect, baseRect);
     }
 }
 
-void CircleItem::draw_radial_grid(QPainter *painter, const QRectF &rect) const {
+void CircleItem::draw_radial_grid(QPainter *painter, const QRectF &extendedRect, const QRectF &baseRect) const {
     if (!material_model_) {
         return;
     }
 
     painter->save();
 
-    // Clip to circle boundary
-    QPainterPath clipPath;
-    clipPath.addEllipse(rect);
-    painter->setClipPath(clipPath);
+    // Remove clipping to allow drawing outside base rect
+    painter->setClipping(false);
 
     // Use composition mode that doesn't darken - draw only lines, no fill
     painter->setCompositionMode(QPainter::CompositionMode_SourceOver);
-    painter->setBrush(Qt::NoBrush); // Ensure no fill
-    QPen gridPen(QColor(0, 0, 0, 255)); // Black lines
+    painter->setBrush(Qt::NoBrush);
+    QPen gridPen(QColor(0, 0, 0, 255));
     gridPen.setWidthF(0.5);
     painter->setPen(gridPen);
 
-    const QPointF center = rect.center();
-    const qreal radius = rect.width() / 2.0;
-    const double freqRadial = material_model_->grid_frequency_x(); // Number of radial lines
-    const double freqConcentric = material_model_->grid_frequency_y(); // Number of concentric circles
+    const QPointF center = baseRect.center();
+    const qreal radius = baseRect.width() / 2.0;
+    const double freqRadial = material_model_->grid_frequency_x();
+    const double freqConcentric = material_model_->grid_frequency_y(); // Used for both inner and outer rings
 
-    // Draw radial lines
-    const int numRadialLines = static_cast<int>(freqRadial);
-    for (int i = 0; i < numRadialLines; ++i) {
-        const qreal angle = (360.0 * i) / numRadialLines;
-        const qreal radians = qDegreesToRadians(angle);
-        const QPointF endPoint = center + QPointF(radius * qCos(radians), radius * qSin(radians));
-        painter->drawLine(center, endPoint);
+    // Calculate ring boundaries
+    const qreal innerRingStartRadius = radius * kInnerRingStartRatio;
+    const qreal innerRingEndRadius = radius;
+    const qreal outerRingStartRadius = radius;
+    const qreal outerRingEndRadius = radius * (1.0 + kOuterRingExtendRatio);
+    const qreal boundaryMargin = radius * kBoundaryRingMargin;
+
+    // Draw concentric circles first (so radial lines appear on top)
+    
+    // Draw inner ring concentric circles
+    const qreal innerRingWidth = innerRingEndRadius - innerRingStartRadius;
+    const qreal innerSpacing = innerRingWidth / (freqConcentric + 1); // +1 accounts for boundary circle
+    qreal firstInnerRadius = innerRingStartRadius + innerSpacing; // First circle (closest to center)
+    qreal currentInnerRadius = firstInnerRadius;
+    while (currentInnerRadius < innerRingEndRadius - boundaryMargin) {
+        painter->drawEllipse(center, currentInnerRadius, currentInnerRadius);
+        currentInnerRadius += innerSpacing;
     }
 
-    // Draw concentric circles
-    const qreal spacing = radius / freqConcentric;
-    qreal currentRadius = spacing;
-    while (currentRadius < radius) {
-        painter->drawEllipse(center, currentRadius, currentRadius);
-        currentRadius += spacing;
+    // Draw inner ring boundary circle
+    painter->drawEllipse(center, innerRingEndRadius, innerRingEndRadius);
+
+    // Draw main boundary circle
+    painter->drawEllipse(center, radius, radius);
+
+    // Draw outer ring concentric circles
+    const qreal outerRingWidth = outerRingEndRadius - outerRingStartRadius;
+    const qreal outerSpacing = outerRingWidth / (freqConcentric + 1); // +1 accounts for boundary circle
+    qreal currentOuterRadius = outerRingStartRadius + boundaryMargin + outerSpacing;
+    qreal lastOuterRadius = outerRingStartRadius + boundaryMargin; // Last circle (farthest from center)
+    while (currentOuterRadius < outerRingEndRadius) {
+        painter->drawEllipse(center, currentOuterRadius, currentOuterRadius);
+        lastOuterRadius = currentOuterRadius;
+        currentOuterRadius += outerSpacing;
+    }
+
+    // Draw radial lines (after circles so they appear on top)
+    const int numRadialLines = static_cast<int>(freqRadial);
+    // Precompute angles to avoid repeated calculations
+    QVector<qreal> angles(numRadialLines);
+    QVector<qreal> cosValues(numRadialLines);
+    QVector<qreal> sinValues(numRadialLines);
+    for (int i = 0; i < numRadialLines; ++i) {
+        angles[i] = (360.0 * i) / numRadialLines;
+        const qreal radians = qDegreesToRadians(angles[i]);
+        cosValues[i] = qCos(radians);
+        sinValues[i] = qSin(radians);
+    }
+
+    for (int i = 0; i < numRadialLines; ++i) {
+        const qreal cosA = cosValues[i];
+        const qreal sinA = sinValues[i];
+        
+        // Inner ring: from first circle to boundary
+        const QPointF innerStart = center + QPointF(firstInnerRadius * cosA, firstInnerRadius * sinA);
+        const QPointF innerEnd = center + QPointF(innerRingEndRadius * cosA, innerRingEndRadius * sinA);
+        painter->drawLine(innerStart, innerEnd);
+        
+        // Outer ring: from boundary to last circle
+        const QPointF outerStart = center + QPointF(outerRingStartRadius * cosA, outerRingStartRadius * sinA);
+        const QPointF outerEnd = center + QPointF(lastOuterRadius * cosA, lastOuterRadius * sinA);
+        painter->drawLine(outerStart, outerEnd);
     }
 
     painter->restore();
+}
+
+QRectF CircleItem::boundingRect() const {
+    QRectF baseRect = QGraphicsEllipseItem::boundingRect();
+    // Extend bounding rect to include outer grid ring
+    // Use the actual rect() to get the circle's radius
+    const qreal radius = rect().width() / 2.0;
+    const qreal extend = radius * kOuterRingExtendRatio;
+    return baseRect.adjusted(-extend, -extend, extend, extend);
 }
 
 QVariant CircleItem::itemChange(GraphicsItemChange change, const QVariant &value) {

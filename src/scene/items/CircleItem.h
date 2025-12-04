@@ -20,6 +20,7 @@ public:
     void set_material_model(class MaterialModel *material) override;
 
 protected:
+    QRectF boundingRect() const override;
     void paint(QPainter *painter, const QStyleOptionGraphicsItem *option, QWidget *widget) override;
     QVariant itemChange(GraphicsItemChange change, const QVariant &value) override;
 
@@ -29,6 +30,6 @@ private:
     class MaterialModel *material_model_ {nullptr};
 
     void notify_geometry_changed() const;
-    void draw_radial_grid(QPainter *painter, const QRectF &rect) const;
+    void draw_radial_grid(QPainter *painter, const QRectF &extendedRect, const QRectF &baseRect) const;
 };
 

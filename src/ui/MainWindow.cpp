@@ -185,8 +185,8 @@ void MainWindow::createActivityObjectsBarAndEditor() {
       auto model = shape_binder_->model_for(dynamic_cast<ISceneObject*>(current_selected_item_));
       if (model) {
         QModelIndex idx = tree_model_->index_from_shape(model);
-        if (idx.isValid()) {
-          tree_model_->setData(idx, new_name, Qt::EditRole);
+    if (idx.isValid()) {
+      tree_model_->setData(idx, new_name, Qt::EditRole);
         }
       }
     }
@@ -237,39 +237,83 @@ void MainWindow::createActivityObjectsBarAndEditor() {
     if (shapeModel->type() == targetType) {
       return;
     }
-    shapeModel->set_type(targetType);
-
+    
     QPointF position = old_graphics_item->pos();
     qreal rotation = old_graphics_item->rotation();
     QString item_name = old_item->name();
-    QSizeF old_size = old_graphics_item->boundingRect().size();
+    
+    // Get current size from model (not from boundingRect which includes grid)
+    Size2D currentModelSize = shapeModel->size();
+    ShapeModel::ShapeType currentType = shapeModel->type();
+    
+    // Change type AFTER getting current size
+    shapeModel->set_type(targetType);
 
-    auto update_model_size = [&](ShapeModel::ShapeType type){
-      switch (type) {
+    // Convert size between shape types based on model sizes, not boundingRect
+    auto convert_size = [&](ShapeModel::ShapeType fromType, ShapeModel::ShapeType toType, const Size2D &fromSize) -> Size2D {
+      switch (fromType) {
         case ShapeModel::ShapeType::Circle: {
-          double diameter = std::max(old_size.width(), old_size.height());
-          if (diameter < 1.0) diameter = 80.0;
-          shapeModel->set_size(Size2D{diameter, diameter});
-          break;
+          // Circle: size stores diameter x diameter
+          const double diameter = fromSize.width; // Both width and height are the same (diameter)
+          switch (toType) {
+            case ShapeModel::ShapeType::Ellipse:
+            case ShapeModel::ShapeType::Rectangle:
+              // Use diameter as both width and height (square shape)
+              return Size2D{diameter, diameter};
+            case ShapeModel::ShapeType::Stick:
+              return Size2D{diameter, 2.0}; // Length = diameter, thickness = 2.0
+            default:
+              return fromSize;
+          }
         }
-        case ShapeModel::ShapeType::Rectangle:
-        case ShapeModel::ShapeType::Ellipse: {
-          QSizeF sz = old_size;
-          if (sz.width() < 1.0) sz.setWidth(100.0);
-          if (sz.height() < 1.0) sz.setHeight(60.0);
-          shapeModel->set_size(Size2D{sz.width(), sz.height()});
-          break;
+        case ShapeModel::ShapeType::Ellipse:
+        case ShapeModel::ShapeType::Rectangle: {
+          // Ellipse/Rectangle: size stores width x height
+          switch (toType) {
+            case ShapeModel::ShapeType::Circle: {
+              // Use max dimension as diameter
+              const double diameter = std::max(fromSize.width, fromSize.height);
+              return Size2D{diameter, diameter};
+            }
+            case ShapeModel::ShapeType::Ellipse:
+            case ShapeModel::ShapeType::Rectangle:
+              // Keep same dimensions
+              return fromSize;
+            case ShapeModel::ShapeType::Stick: {
+              const double length = std::max(fromSize.width, fromSize.height);
+              return Size2D{length, 2.0};
+            }
+            default:
+              return fromSize;
+          }
         }
         case ShapeModel::ShapeType::Stick: {
-          double length = std::max(old_size.width(), old_size.height());
-          if (length < 1.0) length = 100.0;
-          // Fixed thickness for stick (not used for rendering, but stored in model)
-          shapeModel->set_size(Size2D{length, 2.0});
-          break;
+          // Stick: size stores length x thickness (thickness is always 2.0)
+          const double length = fromSize.width;
+          switch (toType) {
+            case ShapeModel::ShapeType::Circle: {
+              // Use length as diameter
+              return Size2D{length, length};
+            }
+            case ShapeModel::ShapeType::Ellipse:
+            case ShapeModel::ShapeType::Rectangle:
+              // Use length as both width and height (square shape)
+              return Size2D{length, length};
+            default:
+              return fromSize;
+          }
         }
+        default:
+          return fromSize;
       }
     };
-    update_model_size(targetType);
+
+    Size2D newSize = convert_size(currentType, targetType, currentModelSize);
+    // Ensure minimum sizes
+    if (newSize.width < 1.0) newSize.width = (targetType == ShapeModel::ShapeType::Circle) ? 80.0 : 100.0;
+    if (newSize.height < 1.0) newSize.height = (targetType == ShapeModel::ShapeType::Circle) ? newSize.width : 60.0;
+    
+    shapeModel->set_size(newSize);
 
     std::unique_ptr<ISceneObject> new_item_ptr(create_item_for_shape(shapeModel));
     if (!new_item_ptr) return;
@@ -280,22 +324,27 @@ void MainWindow::createActivityObjectsBarAndEditor() {
       return;
     }
 
+    // Unbind old item first, before removing it
+    if (shape_binder_) {
+      shape_binder_->unbind_shape(old_item);
+    }
+    
+    // Remove old item from scene before adding new one
+    scene->removeItem(old_graphics_item);
+    delete old_graphics_item;
+
+    // Set up new item
     new_item->set_name(item_name);
     new_graphics_item->setPos(position);
     new_graphics_item->setRotation(rotation);
     scene->addItem(new_graphics_item);
 
+    // Bind new item to model
     if (shape_binder_) {
       shape_binder_->attach_shape(new_item, shapeModel);
-      shape_binder_->unbind_shape(old_item);
-      // Force update for stick items to ensure correct rendering
-      if (targetType == ShapeModel::ShapeType::Stick) {
-        new_graphics_item->update();
-      }
+      // Force update to ensure correct rendering
+      new_graphics_item->update();
     }
-
-    scene->removeItem(old_graphics_item);
-    delete old_graphics_item;
 
     current_selected_item_ = new_graphics_item;
     if (properties_bar_) {
@@ -312,9 +361,9 @@ void MainWindow::createActivityObjectsBarAndEditor() {
       auto shapeModel = tree_model_->shape_from_index(topLeft);
       if (shapeModel && shape_binder_) {
         auto *item = shape_binder_->item_for(shapeModel);
-        if (item && item == current_selected_item_) {
+      if (item && item == current_selected_item_) {
           QString name = QString::fromStdString(shapeModel->name());
-          properties_bar_->update_name(name);
+        properties_bar_->update_name(name);
         }
       }
       // Check if it's a material node
@@ -336,20 +385,20 @@ void MainWindow::createActivityObjectsBarAndEditor() {
                 auto shapeModel = tree_model_->shape_from_index(current);
                 if (shapeModel && shape_binder_) {
                   auto *item = shape_binder_->item_for(shapeModel);
-                  if (item) {
-                    auto *scene = editor_area_->scene();
-                    if (!scene) return;
-                    scene->clearSelection();
-                    item->setSelected(true);
+                if (item) {
+                  auto *scene = editor_area_->scene();
+                  if (!scene) return;
+                  scene->clearSelection();
+                  item->setSelected(true);
                     current_selected_item_ = item;
-                    if (properties_bar_) {
-                      if (auto *sceneObj = dynamic_cast<ISceneObject*>(item)) {
+                  if (properties_bar_) {
+                    if (auto *sceneObj = dynamic_cast<ISceneObject*>(item)) {
                         QString name = QString::fromStdString(shapeModel->name());
-                        properties_bar_->set_selected_item(sceneObj, name);
-                      }
+                      properties_bar_->set_selected_item(sceneObj, name);
                     }
-                    return;
                   }
+                  return;
+                }
                 }
                 // Check if it's a material
                 auto material = tree_model_->material_from_index(current);
@@ -372,8 +421,8 @@ void MainWindow::createActivityObjectsBarAndEditor() {
           if (shape_binder_) {
             if (auto model = shape_binder_->model_for(dynamic_cast<ISceneObject*>(items.first()))) {
               QModelIndex idx = tree_model_->index_from_shape(model);
-              if (idx.isValid()) {
-                treeView->selectionModel()->setCurrentIndex(idx, QItemSelectionModel::ClearAndSelect);
+          if (idx.isValid()) {
+            treeView->selectionModel()->setCurrentIndex(idx, QItemSelectionModel::ClearAndSelect);
               }
             }
           }

@@ -311,6 +311,12 @@ void ShapeModelBinder::apply_geometry(ISceneObject *item, const std::shared_ptr<
         rect.setHeight(size.height);
         rectItem->setRect(rect);
         rectItem->setTransformOriginPoint(rectItem->boundingRect().center());
+    } else if (auto circleItem = dynamic_cast<CircleItem*>(item)) {
+        // Circle: size stores diameter x diameter, rect must be centered at (0,0)
+        const qreal radius = size.width / 2.0;
+        circleItem->setRect(QRectF(-radius, -radius, 2.0 * radius, 2.0 * radius));
+        // Circle is always centered at (0,0), so transform origin is at (0,0) relative to item
+        circleItem->setTransformOriginPoint(QPointF(0, 0));
     } else if (auto ellipseItem = dynamic_cast<QGraphicsEllipseItem*>(graphicsItem)) {
         QRectF rect = ellipseItem->rect();
         rect.setWidth(size.width);
