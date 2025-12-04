@@ -7,28 +7,32 @@ class SubstrateItem;
 class QGraphicsScene;
 
 class EditorArea : public QWidget {
-    Q_OBJECT
-public:
-    explicit EditorArea(QWidget *parent = nullptr);
-    ~EditorArea() override;
+  Q_OBJECT
+ public:
+  explicit EditorArea(QWidget* parent = nullptr);
+  ~EditorArea() override;
 
-    EditorView* view() const { return view_; }
-    void fit_to_substrate();
-    void set_substrate_size(const QSizeF &size);
-    QSizeF substrate_size() const;
-    SubstrateItem* substrate_item() const { return substrate_; }
-    QGraphicsScene* scene() const { return scene_; }
-    QPointF substrate_center() const;
+  EditorView* view() const {
+    return view_;
+  }
+  void fit_to_substrate();
+  void set_substrate_size(const QSizeF& size);
+  QSizeF substrate_size() const;
+  SubstrateItem* substrate_item() const {
+    return substrate_;
+  }
+  QGraphicsScene* scene() const {
+    return scene_;
+  }
+  QPointF substrate_center() const;
 
-private:
-    void init_scene();
-    void showEvent(QShowEvent *event) override;
+ private:
+  void init_scene();
+  void showEvent(QShowEvent* event) override;
 
-private:
-    EditorView *view_ {nullptr};
-    QGraphicsScene *scene_ {nullptr};
-    SubstrateItem *substrate_ {nullptr};
-    bool fitted_once_ {false};
+ private:
+  EditorView* view_{nullptr};
+  QGraphicsScene* scene_{nullptr};
+  SubstrateItem* substrate_{nullptr};
+  bool fitted_once_{false};
 };
-
-

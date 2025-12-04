@@ -24,3 +24,10 @@ compile_commands.json
 *.swo
 *.bak
 *.tmp
+format.sh
+lint.sh
+LINTING.md
+LOGGING.md
+.clang-format
+.clang-format-ignore
+.clang-tidy

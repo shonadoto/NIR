@@ -4,13 +4,12 @@
 #include <QVariant>
 #include <QtGlobal>
 
-#include "ui/editor/SubstrateItem.h"
+#include "model/DocumentModel.h"
 #include "model/MaterialModel.h"
 #include "model/ShapeModel.h"
-#include "model/DocumentModel.h"
+#include "ui/editor/SubstrateItem.h"
 
-ObjectTreeModel::ObjectTreeModel(QObject *parent)
-    : QAbstractItemModel(parent) {
+ObjectTreeModel::ObjectTreeModel(QObject* parent) : QAbstractItemModel(parent) {
   // Initialize root node structure
   root_node_.data = nullptr;
   inclusions_node_.data = nullptr;
@@ -29,13 +28,13 @@ ObjectTreeModel::~ObjectTreeModel() {
   material_nodes_.clear();
 }
 
-void ObjectTreeModel::set_substrate(SubstrateItem *substrate) {
+void ObjectTreeModel::set_substrate(SubstrateItem* substrate) {
   beginResetModel();
   substrate_ = substrate;
   endResetModel();
 }
 
-void ObjectTreeModel::set_document(DocumentModel *document) {
+void ObjectTreeModel::set_document(DocumentModel* document) {
   if (document_ == document) {
     return;
   }
@@ -45,39 +44,42 @@ void ObjectTreeModel::set_document(DocumentModel *document) {
   }
   document_ = document;
   if (document_) {
-    document_connection_ = document_->on_changed().connect([this](const ModelChange &change){
-      if (change.type != ModelChange::Type::Custom) {
-        return;
-      }
-      qDeleteAll(shape_nodes_);
-      shape_nodes_.clear();
-      qDeleteAll(material_nodes_);
-      material_nodes_.clear();
-      beginResetModel();
-      endResetModel();
-    });
+    document_connection_ =
+      document_->on_changed().connect([this](const ModelChange& change) {
+        if (change.type != ModelChange::Type::Custom) {
+          return;
+        }
+        qDeleteAll(shape_nodes_);
+        shape_nodes_.clear();
+        qDeleteAll(material_nodes_);
+        material_nodes_.clear();
+        beginResetModel();
+        endResetModel();
+      });
   }
   beginResetModel();
   endResetModel();
 }
 
-TreeNode* ObjectTreeModel::node_from_index(const QModelIndex &index) const {
+TreeNode* ObjectTreeModel::node_from_index(const QModelIndex& index) const {
   if (!index.isValid()) {
     return root_node();
   }
   return static_cast<TreeNode*>(index.internalPointer());
 }
 
-QModelIndex ObjectTreeModel::create_index_for_node(TreeNode *node, int row, int column) const {
+QModelIndex ObjectTreeModel::create_index_for_node(TreeNode* node, int row,
+                                                   int column) const {
   return createIndex(row, column, node);
 }
 
-QModelIndex ObjectTreeModel::index(int row, int column, const QModelIndex &parentIdx) const {
+QModelIndex ObjectTreeModel::index(int row, int column,
+                                   const QModelIndex& parentIdx) const {
   if (column != 0 || row < 0) {
     return {};
   }
 
-  TreeNode *parentNode = node_from_index(parentIdx);
+  TreeNode* parentNode = node_from_index(parentIdx);
 
   if (parentNode == root_node()) {
     // Root has two children: Inclusions and Materials
@@ -90,16 +92,20 @@ QModelIndex ObjectTreeModel::index(int row, int column, const QModelIndex &paren
   }
 
   if (parentNode == inclusions_node()) {
-    const auto &shapes = document_ ? document_->shapes() : std::vector<std::shared_ptr<ShapeModel>>{};
+    const auto& shapes = document_ ? document_->shapes()
+                                   : std::vector<std::shared_ptr<ShapeModel>>{};
     if (!document_) {
       return {};
     }
     if (row >= 0 && row < static_cast<int>(shapes.size())) {
-      ShapeModel *shapePtr = shapes[row].get();
-      TreeNode *itemNode = const_cast<ObjectTreeModel*>(this)->shape_nodes_.value(shapePtr, nullptr);
+      ShapeModel* shapePtr = shapes[row].get();
+      TreeNode* itemNode =
+        const_cast<ObjectTreeModel*>(this)->shape_nodes_.value(shapePtr,
+                                                               nullptr);
       if (!itemNode) {
         itemNode = new TreeNode(TreeNode::InclusionItem, shapePtr);
-        const_cast<ObjectTreeModel*>(this)->shape_nodes_.insert(shapePtr, itemNode);
+        const_cast<ObjectTreeModel*>(this)->shape_nodes_.insert(shapePtr,
+                                                                itemNode);
       }
       return create_index_for_node(itemNode, row, column);
     }
@@ -110,13 +116,16 @@ QModelIndex ObjectTreeModel::index(int row, int column, const QModelIndex &paren
     if (!document_) {
       return {};
     }
-    const auto &materials = document_->materials();
+    const auto& materials = document_->materials();
     if (row >= 0 && row < static_cast<int>(materials.size())) {
-      MaterialModel *materialPtr = materials[row].get();
-      TreeNode *materialNode = const_cast<ObjectTreeModel*>(this)->material_nodes_.value(materialPtr, nullptr);
+      MaterialModel* materialPtr = materials[row].get();
+      TreeNode* materialNode =
+        const_cast<ObjectTreeModel*>(this)->material_nodes_.value(materialPtr,
+                                                                  nullptr);
       if (!materialNode) {
         materialNode = new TreeNode(TreeNode::MaterialItem, materialPtr);
-        const_cast<ObjectTreeModel*>(this)->material_nodes_.insert(materialPtr, materialNode);
+        const_cast<ObjectTreeModel*>(this)->material_nodes_.insert(
+          materialPtr, materialNode);
       }
       return create_index_for_node(materialNode, row, column);
     }
@@ -126,12 +135,12 @@ QModelIndex ObjectTreeModel::index(int row, int column, const QModelIndex &paren
   return {};
 }
 
-QModelIndex ObjectTreeModel::parent(const QModelIndex &child) const {
+QModelIndex ObjectTreeModel::parent(const QModelIndex& child) const {
   if (!child.isValid()) {
     return {};
   }
 
-  TreeNode *childNode = node_from_index(child);
+  TreeNode* childNode = node_from_index(child);
 
   if (childNode == inclusions_node() || childNode == materials_node()) {
     // These are direct children of root
@@ -151,8 +160,8 @@ QModelIndex ObjectTreeModel::parent(const QModelIndex &child) const {
   return {};
 }
 
-int ObjectTreeModel::rowCount(const QModelIndex &parentIdx) const {
-  TreeNode *parentNode = node_from_index(parentIdx);
+int ObjectTreeModel::rowCount(const QModelIndex& parentIdx) const {
+  TreeNode* parentNode = node_from_index(parentIdx);
 
   if (parentNode == root_node()) {
     // Root has 2 children: Inclusions and Materials
@@ -177,17 +186,17 @@ int ObjectTreeModel::rowCount(const QModelIndex &parentIdx) const {
   return 0;
 }
 
-int ObjectTreeModel::columnCount(const QModelIndex &parentIdx) const {
+int ObjectTreeModel::columnCount(const QModelIndex& parentIdx) const {
   Q_UNUSED(parentIdx);
   return 1;
 }
 
-QVariant ObjectTreeModel::data(const QModelIndex &idx, int role) const {
+QVariant ObjectTreeModel::data(const QModelIndex& idx, int role) const {
   if (!idx.isValid() || idx.column() != 0) {
     return {};
   }
 
-  TreeNode *node = node_from_index(idx);
+  TreeNode* node = node_from_index(idx);
 
   if (role == Qt::DisplayRole) {
     if (node == inclusions_node()) {
@@ -197,7 +206,7 @@ QVariant ObjectTreeModel::data(const QModelIndex &idx, int role) const {
       return QStringLiteral("Materials");
     }
     if (node->type == TreeNode::InclusionItem) {
-      if (auto *shapePtr = static_cast<ShapeModel*>(node->data)) {
+      if (auto* shapePtr = static_cast<ShapeModel*>(node->data)) {
         if (document_) {
           return QString::fromStdString(shapePtr->name());
         }
@@ -205,7 +214,7 @@ QVariant ObjectTreeModel::data(const QModelIndex &idx, int role) const {
       return QStringLiteral("Item");
     }
     if (node->type == TreeNode::MaterialItem) {
-      if (auto *material = static_cast<MaterialModel*>(node->data)) {
+      if (auto* material = static_cast<MaterialModel*>(node->data)) {
         return QString::fromStdString(material->name());
       }
       return QStringLiteral("Material");
@@ -215,12 +224,12 @@ QVariant ObjectTreeModel::data(const QModelIndex &idx, int role) const {
   return {};
 }
 
-Qt::ItemFlags ObjectTreeModel::flags(const QModelIndex &idx) const {
+Qt::ItemFlags ObjectTreeModel::flags(const QModelIndex& idx) const {
   if (!idx.isValid()) {
     return Qt::NoItemFlags;
   }
 
-  TreeNode *node = node_from_index(idx);
+  TreeNode* node = node_from_index(idx);
 
   // Group nodes (Inclusions, Materials) are not editable
   if (node == inclusions_node() || node == materials_node()) {
@@ -231,34 +240,37 @@ Qt::ItemFlags ObjectTreeModel::flags(const QModelIndex &idx) const {
   return Qt::ItemIsEnabled | Qt::ItemIsSelectable | Qt::ItemIsEditable;
 }
 
-QVariant ObjectTreeModel::headerData(int section, Qt::Orientation orientation, int role) const {
+QVariant ObjectTreeModel::headerData(int section, Qt::Orientation orientation,
+                                     int role) const {
   if (orientation == Qt::Horizontal && role == Qt::DisplayRole) {
     Q_UNUSED(section);
-    return QString(); // no visible header text
+    return QString();  // no visible header text
   }
   return QVariant();
 }
 
-std::shared_ptr<ShapeModel> ObjectTreeModel::shape_from_index(const QModelIndex &index) const {
+std::shared_ptr<ShapeModel> ObjectTreeModel::shape_from_index(
+  const QModelIndex& index) const {
   if (!index.isValid()) {
     return {};
   }
-  TreeNode *node = node_from_index(index);
+  TreeNode* node = node_from_index(index);
   if (node && node->type == TreeNode::InclusionItem) {
     return document_ ? document_->shapes().at(index.row()) : nullptr;
   }
   return {};
 }
 
-QModelIndex ObjectTreeModel::index_from_shape(const std::shared_ptr<ShapeModel> &shape) const {
+QModelIndex ObjectTreeModel::index_from_shape(
+  const std::shared_ptr<ShapeModel>& shape) const {
   if (!document_ || !shape) {
     return {};
   }
-  const auto &shapes = document_->shapes();
+  const auto& shapes = document_->shapes();
   for (int i = 0; i < static_cast<int>(shapes.size()); ++i) {
     if (shapes[i] == shape) {
-      ShapeModel *shapePtr = shapes[i].get();
-      TreeNode *node = shape_nodes_.value(shapePtr, nullptr);
+      ShapeModel* shapePtr = shapes[i].get();
+      TreeNode* node = shape_nodes_.value(shapePtr, nullptr);
       if (!node) {
         node = new TreeNode(TreeNode::InclusionItem, shapePtr);
         shape_nodes_.insert(shapePtr, node);
@@ -269,14 +281,15 @@ QModelIndex ObjectTreeModel::index_from_shape(const std::shared_ptr<ShapeModel> 
   return {};
 }
 
-std::shared_ptr<MaterialModel> ObjectTreeModel::material_from_index(const QModelIndex &index) const {
+std::shared_ptr<MaterialModel> ObjectTreeModel::material_from_index(
+  const QModelIndex& index) const {
   if (!index.isValid() || !document_) {
     return nullptr;
   }
-  TreeNode *node = node_from_index(index);
+  TreeNode* node = node_from_index(index);
   if (node && node->type == TreeNode::MaterialItem) {
-    auto *materialPtr = static_cast<MaterialModel*>(node->data);
-    for (const auto &material : document_->materials()) {
+    auto* materialPtr = static_cast<MaterialModel*>(node->data);
+    for (const auto& material : document_->materials()) {
       if (material.get() == materialPtr) {
         return material;
       }
@@ -285,15 +298,16 @@ std::shared_ptr<MaterialModel> ObjectTreeModel::material_from_index(const QModel
   return nullptr;
 }
 
-QModelIndex ObjectTreeModel::index_from_material(const std::shared_ptr<MaterialModel> &material) const {
+QModelIndex ObjectTreeModel::index_from_material(
+  const std::shared_ptr<MaterialModel>& material) const {
   if (!material || !document_) {
     return {};
   }
-  const auto &materials = document_->materials();
+  const auto& materials = document_->materials();
   for (int i = 0; i < static_cast<int>(materials.size()); ++i) {
     if (materials[i] == material) {
-      MaterialModel *materialPtr = materials[i].get();
-      TreeNode *node = material_nodes_.value(materialPtr, nullptr);
+      MaterialModel* materialPtr = materials[i].get();
+      TreeNode* node = material_nodes_.value(materialPtr, nullptr);
       if (!node) {
         node = new TreeNode(TreeNode::MaterialItem, materialPtr);
         material_nodes_.insert(materialPtr, node);
@@ -311,19 +325,21 @@ void ObjectTreeModel::clear_items() {
   endResetModel();
 }
 
-std::shared_ptr<MaterialModel> ObjectTreeModel::create_material(const QString &name) {
+std::shared_ptr<MaterialModel> ObjectTreeModel::create_material(
+  const QString& name) {
   if (!document_) {
     return nullptr;
   }
   return document_->create_material({}, name.toStdString());
 }
 
-void ObjectTreeModel::remove_material(const std::shared_ptr<MaterialModel> &material) {
+void ObjectTreeModel::remove_material(
+  const std::shared_ptr<MaterialModel>& material) {
   if (!document_ || !material) {
     return;
   }
   document_->remove_material(material);
-  if (auto *node = material_nodes_.take(material.get())) {
+  if (auto* node = material_nodes_.take(material.get())) {
     delete node;
   }
 }
@@ -337,20 +353,21 @@ void ObjectTreeModel::clear_materials() {
   material_nodes_.clear();
 }
 
-bool ObjectTreeModel::setData(const QModelIndex &index, const QVariant &value, int role) {
+bool ObjectTreeModel::setData(const QModelIndex& index, const QVariant& value,
+                              int role) {
   if (!index.isValid() || role != Qt::EditRole) {
     return false;
   }
 
-  TreeNode *node = node_from_index(index);
+  TreeNode* node = node_from_index(index);
 
   QString newName = value.toString().trimmed();
   if (newName.isEmpty()) {
-    return false; // Reject empty names
+    return false;  // Reject empty names
   }
 
   if (node->type == TreeNode::InclusionItem) {
-    if (auto *shapePtr = static_cast<ShapeModel*>(node->data)) {
+    if (auto* shapePtr = static_cast<ShapeModel*>(node->data)) {
       if (document_) {
         shapePtr->set_name(newName.toStdString());
         emit dataChanged(index, index, {Qt::DisplayRole});
@@ -358,7 +375,7 @@ bool ObjectTreeModel::setData(const QModelIndex &index, const QVariant &value, i
       }
     }
   } else if (node->type == TreeNode::MaterialItem) {
-    if (auto *material = static_cast<MaterialModel*>(node->data)) {
+    if (auto* material = static_cast<MaterialModel*>(node->data)) {
       material->set_name(newName.toStdString());
       emit dataChanged(index, index, {Qt::DisplayRole});
       return true;
@@ -368,15 +385,16 @@ bool ObjectTreeModel::setData(const QModelIndex &index, const QVariant &value, i
   return false;
 }
 
-bool ObjectTreeModel::removeRows(int row, int count, const QModelIndex &parent) {
+bool ObjectTreeModel::removeRows(int row, int count,
+                                 const QModelIndex& parent) {
   if (count <= 0) {
     return false;
   }
 
-  TreeNode *parentNode = node_from_index(parent);
+  TreeNode* parentNode = node_from_index(parent);
 
   if (parentNode == inclusions_node() && document_) {
-    const auto &shapes = document_->shapes();
+    const auto& shapes = document_->shapes();
     if (row < 0 || row + count > static_cast<int>(shapes.size())) {
       return false;
     }
@@ -385,7 +403,7 @@ bool ObjectTreeModel::removeRows(int row, int count, const QModelIndex &parent) 
       document_->remove_shape(shape);
       if (shape) {
         if (auto node = shape_nodes_.take(shape.get())) {
-      delete node;
+          delete node;
         }
       }
     }
@@ -393,15 +411,15 @@ bool ObjectTreeModel::removeRows(int row, int count, const QModelIndex &parent) 
   }
 
   if (parentNode == materials_node() && document_) {
-    const auto &materials = document_->materials();
+    const auto& materials = document_->materials();
     if (row < 0 || row + count > static_cast<int>(materials.size())) {
       return false;
     }
     for (int r = 0; r < count; ++r) {
       auto material = materials[row];
       document_->remove_material(material);
-      if (auto *node = material_nodes_.take(material.get())) {
-      delete node;
+      if (auto* node = material_nodes_.take(material.get())) {
+        delete node;
       }
     }
     beginResetModel();

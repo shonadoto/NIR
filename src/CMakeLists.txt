@@ -66,6 +66,41 @@ target_include_directories(NIRMaterialEditor PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}
 
 target_link_libraries(NIRMaterialEditor PRIVATE Qt6::Widgets Qt6::Svg spdlog::spdlog)
 
+# Enable clang-tidy if available - will run during compilation and fail on errors
+# Try versioned names first (clang-tidy-18, clang-tidy-17, etc.), then unversioned
+find_program(CLANG_TIDY_EXE 
+    NAMES 
+        clang-tidy-18 clang-tidy-17 clang-tidy-16 clang-tidy-15 clang-tidy-14 clang-tidy-13
+        clang-tidy-12 clang-tidy-11 clang-tidy-10
+        clang-tidy
+)
+if(CLANG_TIDY_EXE)
+    message(STATUS "clang-tidy found: ${CLANG_TIDY_EXE}")
+    # Configure clang-tidy to treat warnings as errors and fail build on issues
+    set_target_properties(NIRMaterialEditor PROPERTIES
+        CXX_CLANG_TIDY "${CLANG_TIDY_EXE};-config-file=${CMAKE_SOURCE_DIR}/.clang-tidy;-warnings-as-errors=*"
+    )
+    message(STATUS "clang-tidy enabled: will run during compilation and fail on errors")
+    
+    # Add custom target for full linting (runs on all files)
+    add_custom_target(lint
+        COMMAND ${CMAKE_COMMAND} -E echo "Running clang-tidy on all source files..."
+        COMMAND ${CLANG_TIDY_EXE}
+            -config-file=${CMAKE_SOURCE_DIR}/.clang-tidy
+            -warnings-as-errors=*
+            -p ${CMAKE_BINARY_DIR}
+            ${SOURCES}
+        WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
+        COMMENT "Linting all source files with clang-tidy"
+        VERBATIM
+    )
+    message(STATUS "Custom target 'lint' created - run 'cmake --build build --target lint' to lint all files")
+else()
+    message(WARNING "clang-tidy not found - install it to enable static analysis")
+    message(WARNING "  Ubuntu/Debian: sudo apt-get install clang-tidy")
+    message(WARNING "  macOS: brew install llvm")
+endif()
+
 # Add debug flags for better crash diagnostics
 if(CMAKE_BUILD_TYPE STREQUAL "Debug" OR NOT CMAKE_BUILD_TYPE)
     target_compile_options(NIRMaterialEditor PRIVATE

@@ -1,35 +1,36 @@
 #pragma once
 
 #include <spdlog/spdlog.h>
+
 #include <sstream>
 #include <string>
 
 // Helper class for stream-based logging
 class LogStream {
-public:
-    LogStream(spdlog::level::level_enum level) : level_(level) {}
+ public:
+  LogStream(spdlog::level::level_enum level) : level_(level) {}
 
-    ~LogStream() {
-        if (!message_.str().empty()) {
-            spdlog::log(level_, "{}", message_.str());
-        }
+  ~LogStream() {
+    if (!message_.str().empty()) {
+      spdlog::log(level_, "{}", message_.str());
     }
+  }
 
-    template<typename T>
-    LogStream& operator<<(const T& value) {
-        message_ << value;
-        return *this;
-    }
+  template <typename T>
+  LogStream& operator<<(const T& value) {
+    message_ << value;
+    return *this;
+  }
 
-    // Handle std::endl and other stream manipulators
-    LogStream& operator<<(std::ostream& (*manip)(std::ostream&)) {
-        manip(message_);
-        return *this;
-    }
+  // Handle std::endl and other stream manipulators
+  LogStream& operator<<(std::ostream& (*manip)(std::ostream&)) {
+    manip(message_);
+    return *this;
+  }
 
-private:
-    spdlog::level::level_enum level_;
-    std::ostringstream message_;
+ private:
+  spdlog::level::level_enum level_;
+  std::ostringstream message_;
 };
 
 // Macros for stream-based logging
@@ -47,4 +48,3 @@ private:
 #define LOG_WARN_FMT(...) spdlog::warn(__VA_ARGS__)
 #define LOG_ERROR_FMT(...) spdlog::error(__VA_ARGS__)
 #define LOG_CRITICAL_FMT(...) spdlog::critical(__VA_ARGS__)
-

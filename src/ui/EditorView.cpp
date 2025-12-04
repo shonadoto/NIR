@@ -1,6 +1,7 @@
 #include "EditorView.h"
 
-#include "ui/editor/SubstrateItem.h"
+#include <qnamespace.h>
+
 #include <QGraphicsItem>
 #include <QGraphicsScene>
 #include <QMouseEvent>
@@ -9,17 +10,18 @@
 #include <QtGlobal>
 #include <QtMath>
 #include <algorithm>
-#include <qnamespace.h>
+
+#include "ui/editor/SubstrateItem.h"
 
 namespace {
-constexpr qreal kZoomStep = 1.15;   // per mouse wheel notch (symmetrical)
-constexpr qreal kMinScale = 0.70;   // 70%
-constexpr qreal kMaxScale = 100.0;  // 10000%
-constexpr qreal kRotateStepDeg = 5; // rotation step per notch when Ctrl held
+constexpr qreal kZoomStep = 1.15;    // per mouse wheel notch (symmetrical)
+constexpr qreal kMinScale = 0.70;    // 70%
+constexpr qreal kMaxScale = 100.0;   // 10000%
+constexpr qreal kRotateStepDeg = 5;  // rotation step per notch when Ctrl held
 constexpr qreal kScaleStep = 1.05;  // item scale step per notch when Shift held
-} // namespace
+}  // namespace
 
-EditorView::EditorView(QWidget *parent)
+EditorView::EditorView(QWidget* parent)
     : QGraphicsView(parent), scene_(new QGraphicsScene(this)) {
   setScene(scene_);
   setRenderHint(QPainter::Antialiasing, true);
@@ -33,7 +35,7 @@ EditorView::EditorView(QWidget *parent)
 
 EditorView::~EditorView() = default;
 
-void EditorView::fitToItem(const QGraphicsItem *item) {
+void EditorView::fitToItem(const QGraphicsItem* item) {
   if (item == nullptr) {
     return;
   }
@@ -47,22 +49,22 @@ void EditorView::fitToItem(const QGraphicsItem *item) {
   scale_ = transform().m11();
 }
 
-void EditorView::wheelEvent(QWheelEvent *event) {
+void EditorView::wheelEvent(QWheelEvent* event) {
   const QPoint num_degrees = event->angleDelta() / 8;
   if (num_degrees.y() == 0) {
     QGraphicsView::wheelEvent(event);
     return;
   }
 
-  const int num_steps = num_degrees.y() / 15; // 15 deg per notch
+  const int num_steps = num_degrees.y() / 15;  // 15 deg per notch
   const auto mods = event->modifiers();
 
 #ifdef Q_OS_MACOS
-  const bool rotateMod = mods & Qt::ControlModifier; // Cmd
-  const bool scaleMod = mods & Qt::AltModifier;      // Shift
+  const bool rotateMod = mods & Qt::ControlModifier;  // Cmd
+  const bool scaleMod = mods & Qt::AltModifier;       // Shift
 #else
-  const bool rotateMod = mods & Qt::ControlModifier; // Ctrl
-  const bool scaleMod = mods & Qt::MetaModifier;     // Shift
+  const bool rotateMod = mods & Qt::ControlModifier;  // Ctrl
+  const bool scaleMod = mods & Qt::MetaModifier;      // Shift
 #endif
 
   // Transform selected items with modifiers (scale first to avoid conflict on
@@ -70,15 +72,15 @@ void EditorView::wheelEvent(QWheelEvent *event) {
   if (scaleMod) {
     const qreal step = (num_steps > 0) ? std::pow(kScaleStep, num_steps)
                                        : std::pow(1.0 / kScaleStep, -num_steps);
-    QList<QGraphicsItem *> targets = scene()->selectedItems();
+    QList<QGraphicsItem*> targets = scene()->selectedItems();
     if (targets.isEmpty()) {
-      if (auto *hit = itemAt(event->position().toPoint())) {
+      if (auto* hit = itemAt(event->position().toPoint())) {
         targets << hit;
       }
     }
     // Exclude substrate from scaling
     for (int i = targets.size() - 1; i >= 0; --i) {
-      if (dynamic_cast<SubstrateItem *>(targets[i]) != nullptr) {
+      if (dynamic_cast<SubstrateItem*>(targets[i]) != nullptr) {
         targets.removeAt(i);
       }
     }
@@ -86,7 +88,7 @@ void EditorView::wheelEvent(QWheelEvent *event) {
       event->accept();
       return;
     }
-    for (QGraphicsItem *it : targets) {
+    for (QGraphicsItem* it : targets) {
       it->setTransformOriginPoint(it->boundingRect().center());
       const qreal newScale = std::clamp(it->scale() * step, 0.1, 10.0);
       it->setScale(newScale);
@@ -96,17 +98,17 @@ void EditorView::wheelEvent(QWheelEvent *event) {
   }
 
   if (rotateMod) {
-    const qreal delta = (num_steps > 0 ? kRotateStepDeg : -kRotateStepDeg) *
-                        std::abs(num_steps);
-    QList<QGraphicsItem *> targets = scene()->selectedItems();
+    const qreal delta =
+      (num_steps > 0 ? kRotateStepDeg : -kRotateStepDeg) * std::abs(num_steps);
+    QList<QGraphicsItem*> targets = scene()->selectedItems();
     if (targets.isEmpty()) {
-      if (auto *hit = itemAt(event->position().toPoint())) {
+      if (auto* hit = itemAt(event->position().toPoint())) {
         targets << hit;
       }
     }
     // Exclude substrate from rotation
     for (int i = targets.size() - 1; i >= 0; --i) {
-      if (dynamic_cast<SubstrateItem *>(targets[i]) != nullptr) {
+      if (dynamic_cast<SubstrateItem*>(targets[i]) != nullptr) {
         targets.removeAt(i);
       }
     }
@@ -114,7 +116,7 @@ void EditorView::wheelEvent(QWheelEvent *event) {
       event->accept();
       return;
     }
-    for (QGraphicsItem *it : targets) {
+    for (QGraphicsItem* it : targets) {
       it->setRotation(it->rotation() + delta);
     }
     event->accept();
@@ -126,7 +128,7 @@ void EditorView::wheelEvent(QWheelEvent *event) {
   applyZoom(factor);
 }
 
-void EditorView::mousePressEvent(QMouseEvent *event) {
+void EditorView::mousePressEvent(QMouseEvent* event) {
   if (event->button() == Qt::MiddleButton) {
     panning_ = true;
     last_mouse_pos_ = event->pos();
@@ -148,7 +150,7 @@ void EditorView::mousePressEvent(QMouseEvent *event) {
   QGraphicsView::mousePressEvent(event);
 }
 
-void EditorView::mouseMoveEvent(QMouseEvent *event) {
+void EditorView::mouseMoveEvent(QMouseEvent* event) {
   if (panning_) {
     const QPoint delta = event->pos() - last_mouse_pos_;
     last_mouse_pos_ = event->pos();
@@ -160,7 +162,7 @@ void EditorView::mouseMoveEvent(QMouseEvent *event) {
   QGraphicsView::mouseMoveEvent(event);
 }
 
-void EditorView::mouseReleaseEvent(QMouseEvent *event) {
+void EditorView::mouseReleaseEvent(QMouseEvent* event) {
   if (panning_ && (event->button() == Qt::MiddleButton ||
                    event->button() == Qt::LeftButton)) {
     panning_ = false;
