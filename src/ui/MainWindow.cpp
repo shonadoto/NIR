@@ -19,6 +19,7 @@
 #include "model/ObjectTreeModel.h"
 #include "model/MaterialModel.h"
 #include "model/ShapeModel.h"
+#include "model/ShapeSizeConverter.h"
 #include "model/DocumentModel.h"
 #include "model/SubstrateModel.h"
 #include "model/core/ModelTypes.h"
@@ -210,147 +211,7 @@ void MainWindow::createActivityObjectsBarAndEditor() {
   });
 
   // Connect PropertiesBar type change to replace object
-  connect(properties_bar_, &PropertiesBar::type_changed, this, [this](ISceneObject *old_item, const QString &new_type){
-    if (!old_item || !editor_area_ || !tree_model_) return;
-    auto *old_graphics_item = dynamic_cast<QGraphicsItem*>(old_item);
-    if (!old_graphics_item) return;
-
-    auto *scene = editor_area_->scene();
-    if (!scene) return;
-
-    std::shared_ptr<ShapeModel> shapeModel;
-    if (shape_binder_) {
-      shapeModel = shape_binder_->model_for(old_item);
-    }
-    if (!shapeModel) {
-      return;
-    }
-
-    auto to_shape_type = [](const QString &type) {
-      if (type == "circle") return ShapeModel::ShapeType::Circle;
-      if (type == "ellipse") return ShapeModel::ShapeType::Ellipse;
-      if (type == "stick") return ShapeModel::ShapeType::Stick;
-      return ShapeModel::ShapeType::Rectangle;
-    };
-
-    ShapeModel::ShapeType targetType = to_shape_type(new_type);
-    if (shapeModel->type() == targetType) {
-      return;
-    }
-    
-    QPointF position = old_graphics_item->pos();
-    qreal rotation = old_graphics_item->rotation();
-    QString item_name = old_item->name();
-    
-    // Get current size from model (not from boundingRect which includes grid)
-    Size2D currentModelSize = shapeModel->size();
-    ShapeModel::ShapeType currentType = shapeModel->type();
-    
-    // Change type AFTER getting current size
-    shapeModel->set_type(targetType);
-
-    // Convert size between shape types based on model sizes, not boundingRect
-    auto convert_size = [&](ShapeModel::ShapeType fromType, ShapeModel::ShapeType toType, const Size2D &fromSize) -> Size2D {
-      switch (fromType) {
-        case ShapeModel::ShapeType::Circle: {
-          // Circle: size stores diameter x diameter
-          const double diameter = fromSize.width; // Both width and height are the same (diameter)
-          switch (toType) {
-            case ShapeModel::ShapeType::Ellipse:
-            case ShapeModel::ShapeType::Rectangle:
-              // Use diameter as both width and height (square shape)
-              return Size2D{diameter, diameter};
-            case ShapeModel::ShapeType::Stick:
-              return Size2D{diameter, 2.0}; // Length = diameter, thickness = 2.0
-            default:
-              return fromSize;
-          }
-        }
-        case ShapeModel::ShapeType::Ellipse:
-        case ShapeModel::ShapeType::Rectangle: {
-          // Ellipse/Rectangle: size stores width x height
-          switch (toType) {
-            case ShapeModel::ShapeType::Circle: {
-              // Use max dimension as diameter
-              const double diameter = std::max(fromSize.width, fromSize.height);
-              return Size2D{diameter, diameter};
-            }
-            case ShapeModel::ShapeType::Ellipse:
-            case ShapeModel::ShapeType::Rectangle:
-              // Keep same dimensions
-              return fromSize;
-            case ShapeModel::ShapeType::Stick: {
-              const double length = std::max(fromSize.width, fromSize.height);
-              return Size2D{length, 2.0};
-            }
-            default:
-              return fromSize;
-          }
-        }
-        case ShapeModel::ShapeType::Stick: {
-          // Stick: size stores length x thickness (thickness is always 2.0)
-          const double length = fromSize.width;
-          switch (toType) {
-            case ShapeModel::ShapeType::Circle: {
-              // Use length as diameter
-              return Size2D{length, length};
-            }
-            case ShapeModel::ShapeType::Ellipse:
-            case ShapeModel::ShapeType::Rectangle:
-              // Use length as both width and height (square shape)
-              return Size2D{length, length};
-            default:
-              return fromSize;
-          }
-        }
-        default:
-          return fromSize;
-      }
-    };
-
-    Size2D newSize = convert_size(currentType, targetType, currentModelSize);
-    // Ensure minimum sizes
-    if (newSize.width < 1.0) newSize.width = (targetType == ShapeModel::ShapeType::Circle) ? 80.0 : 100.0;
-    if (newSize.height < 1.0) newSize.height = (targetType == ShapeModel::ShapeType::Circle) ? newSize.width : 60.0;
-    
-    shapeModel->set_size(newSize);
-
-    std::unique_ptr<ISceneObject> new_item_ptr(create_item_for_shape(shapeModel));
-    if (!new_item_ptr) return;
-    auto *new_item = new_item_ptr.release();
-    auto *new_graphics_item = dynamic_cast<QGraphicsItem*>(new_item);
-    if (!new_graphics_item) {
-      delete new_item;
-      return;
-    }
-
-    // Unbind old item first, before removing it
-    if (shape_binder_) {
-      shape_binder_->unbind_shape(old_item);
-    }
-    
-    // Remove old item from scene before adding new one
-    scene->removeItem(old_graphics_item);
-    delete old_graphics_item;
-
-    // Set up new item
-    new_item->set_name(item_name);
-    new_graphics_item->setPos(position);
-    new_graphics_item->setRotation(rotation);
-    scene->addItem(new_graphics_item);
-
-    // Bind new item to model
-    if (shape_binder_) {
-      shape_binder_->attach_shape(new_item, shapeModel);
-      // Force update to ensure correct rendering
-      new_graphics_item->update();
-    }
-
-    current_selected_item_ = new_graphics_item;
-    if (properties_bar_) {
-      properties_bar_->set_selected_item(new_item, item_name);
-    }
-  });
+  connect(properties_bar_, &PropertiesBar::type_changed, this, &MainWindow::change_shape_type);
   // Bind model to the Objects bar (first sidebar entry)
   // We know SideBarWidget registered the "objects" page as index 0
   // so we can safely find the first page's widget and cast to ObjectsBar
@@ -604,7 +465,7 @@ ISceneObject* MainWindow::create_item_for_shape(const std::shared_ptr<ShapeModel
       const qreal halfLen = static_cast<qreal>(size.width) / 2.0;
       auto *item = new StickItem(QLineF(-halfLen, 0.0, halfLen, 0.0));
       QPen pen = item->pen();
-      pen.setWidthF(2.0); // Fixed width for stick
+      pen.setWidthF(ShapeConstants::kStickThickness);
       item->setPen(pen);
       item->set_name(QString::fromStdString(shape->name()));
       return item;
@@ -666,5 +527,145 @@ void MainWindow::rebuild_scene_from_document() {
   }
 
   tree_model_->set_substrate(editor_area_->substrate_item());
+}
+
+ShapeModel::ShapeType MainWindow::string_to_shape_type(const QString &type) const {
+    if (type == "circle") return ShapeModel::ShapeType::Circle;
+    if (type == "ellipse") return ShapeModel::ShapeType::Ellipse;
+    if (type == "stick") return ShapeModel::ShapeType::Stick;
+    return ShapeModel::ShapeType::Rectangle;
+}
+
+Size2D MainWindow::convert_shape_size(ShapeModel::ShapeType from, ShapeModel::ShapeType to, const Size2D &size) const {
+    return ShapeSizeConverter::convert(from, to, size);
+}
+
+void MainWindow::change_shape_type(ISceneObject *old_item, const QString &new_type) {
+    if (!old_item || !editor_area_ || !tree_model_) {
+        return;
+    }
+    
+    auto *old_graphics_item = dynamic_cast<QGraphicsItem*>(old_item);
+    if (!old_graphics_item) {
+        return;
+    }
+
+    auto *scene = editor_area_->scene();
+    if (!scene) {
+        return;
+    }
+
+    std::shared_ptr<ShapeModel> shapeModel;
+    if (shape_binder_) {
+        shapeModel = shape_binder_->model_for(old_item);
+    }
+    if (!shapeModel) {
+        return;
+    }
+
+    ShapeModel::ShapeType targetType = string_to_shape_type(new_type);
+    if (shapeModel->type() == targetType) {
+        return;
+    }
+    
+    // Get current properties before changing type
+    // Calculate center of old item in scene coordinates using sceneBoundingRect for accuracy
+    QPointF oldCenter = old_graphics_item->sceneBoundingRect().center();
+    
+    qreal rotation = old_graphics_item->rotation();
+    QString item_name = old_item->name();
+    Size2D currentModelSize = shapeModel->size();
+    ShapeModel::ShapeType currentType = shapeModel->type();
+    
+    // Convert size and ensure minimum
+    Size2D newSize = convert_shape_size(currentType, targetType, currentModelSize);
+    newSize = ShapeSizeConverter::ensure_minimum(newSize, targetType);
+    
+    // Update model
+    shapeModel->set_type(targetType);
+    shapeModel->set_size(newSize);
+
+    // Replace the item in the scene, preserving center position
+    replace_shape_item(old_item, shapeModel, oldCenter, rotation, item_name);
+}
+
+void MainWindow::replace_shape_item(ISceneObject *old_item, const std::shared_ptr<ShapeModel> &model, 
+                                    const QPointF &centerPosition, qreal rotation, const QString &name) {
+    if (!old_item || !editor_area_ || !model) {
+        return;
+    }
+    
+    auto *old_graphics_item = dynamic_cast<QGraphicsItem*>(old_item);
+    if (!old_graphics_item) {
+        return;
+    }
+    
+    auto *scene = editor_area_->scene();
+    if (!scene) {
+        return;
+    }
+
+    // Create new item (not yet added to scene)
+    std::unique_ptr<ISceneObject> new_item_ptr(create_item_for_shape(model));
+    if (!new_item_ptr) {
+        return; // Failed to create item
+    }
+    
+    auto *new_item = new_item_ptr.release();
+    auto *new_graphics_item = dynamic_cast<QGraphicsItem*>(new_item);
+    if (!new_graphics_item) {
+        delete new_item;
+        return;
+    }
+
+    // Calculate position for new item so its center matches the old center
+    // We need to add item to scene temporarily to get accurate boundingRect
+    // (some items may need scene context for proper boundingRect calculation)
+    scene->addItem(new_graphics_item);
+    QRectF newBoundingRect = new_graphics_item->boundingRect();
+    scene->removeItem(new_graphics_item);
+    
+    // Validate boundingRect
+    if (newBoundingRect.isEmpty() || !newBoundingRect.isValid()) {
+        delete new_item;
+        return; // Invalid bounding rect
+    }
+    
+    // Calculate position: center in scene = pos() + boundingRect().center()
+    // So: pos() = center - boundingRect().center()
+    QPointF newPosition = centerPosition - newBoundingRect.center();
+
+    // Unbind old item first, before removing it
+    if (shape_binder_) {
+        shape_binder_->unbind_shape(old_item);
+    }
+    
+    // Remove old item from scene before adding new one
+    scene->removeItem(old_graphics_item);
+    delete old_graphics_item;
+
+    // Set up new item with calculated position to preserve center
+    new_item->set_name(name);
+    new_graphics_item->setPos(newPosition);
+    new_graphics_item->setRotation(rotation);
+    scene->addItem(new_graphics_item);
+
+    // Update model position before binding to avoid apply_geometry overwriting it
+    if (shape_binder_) {
+        // Convert QPointF to model Point2D (using same conversion as ShapeModelBinder)
+        model->set_position(Point2D{newPosition.x(), newPosition.y()});
+        model->set_rotation_deg(rotation);
+        
+        // Now bind - apply_geometry will use the correct position from model
+        shape_binder_->attach_shape(new_item, model);
+        // Force update to ensure correct rendering
+        new_graphics_item->update();
+    }
+
+    // Update UI
+    current_selected_item_ = new_graphics_item;
+    if (properties_bar_) {
+        properties_bar_->set_selected_item(new_item, name);
+    }
 }
 

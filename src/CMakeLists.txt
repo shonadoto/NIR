@@ -16,6 +16,7 @@ set(SOURCES
     model/core/ModelObject.cpp
     model/MaterialModel.cpp
     model/ShapeModel.cpp
+    model/ShapeSizeConverter.cpp
     model/SubstrateModel.cpp
     scene/items/RectangleItem.cpp
     scene/items/EllipseItem.cpp
@@ -44,6 +45,7 @@ set(HEADERS
     model/core/ModelObject.h
     model/MaterialModel.h
     model/ShapeModel.h
+    model/ShapeSizeConverter.h
     model/SubstrateModel.h
     scene/ISceneObject.h
     scene/items/RectangleItem.h

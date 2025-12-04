@@ -266,10 +266,17 @@ void ShapeModelBinder::update_model_geometry(ISceneObject *item, const std::shar
     model->set_position(to_model_point(graphicsItem->pos()));
     model->set_rotation_deg(graphicsItem->rotation());
 
-    if (auto rectItem = dynamic_cast<QGraphicsRectItem*>(graphicsItem)) {
+    // Check CircleItem first (before QGraphicsEllipseItem) since CircleItem inherits from it
+    if (auto circleItem = dynamic_cast<CircleItem*>(item)) {
+        // Circle: rect().width() is diameter, model stores diameter x diameter
+        QRectF rect = circleItem->rect();
+        const qreal diameter = rect.width(); // For circle, width == height == diameter
+        model->set_size(Size2D{diameter, diameter});
+    } else if (auto rectItem = dynamic_cast<QGraphicsRectItem*>(graphicsItem)) {
         QRectF rect = rectItem->rect();
         model->set_size(Size2D{rect.width(), rect.height()});
     } else if (auto ellipseItem = dynamic_cast<QGraphicsEllipseItem*>(graphicsItem)) {
+        // This handles EllipseItem (not CircleItem, as it's checked above)
         QRectF rect = ellipseItem->rect();
         model->set_size(Size2D{rect.width(), rect.height()});
     } else if (auto lineItem = dynamic_cast<QGraphicsLineItem*>(graphicsItem)) {
