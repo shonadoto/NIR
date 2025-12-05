@@ -15,6 +15,16 @@ struct Color {
   bool operator!=(const Color& other) const {
     return !(*this == other);
   }
+
+  /**
+   * @brief Check if color values are valid (all in range 0-255).
+   * @return true if color is valid.
+   */
+  bool is_valid() const {
+    // uint8_t is always in range 0-255, so this is always true
+    // But we keep it for API consistency and potential future validation
+    return true;
+  }
 };
 
 struct Point2D {
@@ -27,6 +37,14 @@ struct Point2D {
   bool operator!=(const Point2D& other) const {
     return !(*this == other);
   }
+
+  Point2D operator+(const Point2D& other) const {
+    return Point2D{x + other.x, y + other.y};
+  }
+
+  Point2D operator-(const Point2D& other) const {
+    return Point2D{x - other.x, y - other.y};
+  }
 };
 
 struct Size2D {
@@ -38,6 +56,22 @@ struct Size2D {
   }
   bool operator!=(const Size2D& other) const {
     return !(*this == other);
+  }
+
+  Size2D operator+(const Size2D& other) const {
+    return Size2D{width + other.width, height + other.height};
+  }
+
+  Size2D operator-(const Size2D& other) const {
+    return Size2D{width - other.width, height - other.height};
+  }
+
+  /**
+   * @brief Check if size is valid (both dimensions >= 0).
+   * @return true if size is valid.
+   */
+  bool is_valid() const {
+    return width >= 0.0 && height >= 0.0;
   }
 };
 
@@ -53,4 +87,11 @@ struct ModelChange {
 
   Type type{Type::Custom};
   std::string property;
+
+  bool operator==(const ModelChange& other) const {
+    return type == other.type && property == other.property;
+  }
+  bool operator!=(const ModelChange& other) const {
+    return !(*this == other);
+  }
 };

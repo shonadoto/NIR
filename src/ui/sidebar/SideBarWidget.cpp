@@ -8,6 +8,10 @@
 #include <QStackedWidget>
 #include <QString>
 
+namespace {
+constexpr int kDefaultObjectsBarWidthPx = 280;
+}  // namespace
+
 SideBarWidget::SideBarWidget(QWidget* parent)
     : QWidget(parent), activity_bar_(this), stack_(this), layout_(this) {
   layout_.setContentsMargins(0, 0, 0, 0);
@@ -24,10 +28,11 @@ SideBarWidget::SideBarWidget(QWidget* parent)
 
 SideBarWidget::~SideBarWidget() = default;
 
-void SideBarWidget::registerSidebar(const QString& id, const QIcon& icon,
-                                    QWidget* content, int preferredWidth) {
+void SideBarWidget::registerSidebar(const QString& sidebar_id,
+                                    const QIcon& icon, QWidget* content,
+                                    int preferredWidth) {
   Entry entry;
-  entry.id = id;
+  entry.id = sidebar_id;
   entry.content = content;
   entry.stack_index = stack_.addWidget(content);
   entry.preferred_width = preferredWidth;
@@ -37,7 +42,7 @@ void SideBarWidget::registerSidebar(const QString& id, const QIcon& icon,
     btn, &QToolButton::toggled, this,
     [this, entry_id = entry.id](bool /*on*/) { setActive(entry_id); });
   entry.button = btn;
-  id_to_entry_.insert(id, std::move(entry));
+  id_to_entry_.insert(sidebar_id, std::move(entry));
 
   // Ensure initial width accounts for new button's sizeHint
   applyWidth();
@@ -45,7 +50,7 @@ void SideBarWidget::registerSidebar(const QString& id, const QIcon& icon,
 
 void SideBarWidget::registerObjectBar() {
   registerSidebar("objects", QIcon(":/icons/objects.svg"), new ObjectsBar(this),
-                  280);
+                  kDefaultObjectsBarWidthPx);
 }
 
 void SideBarWidget::setActive(const QString& entry_id) {
@@ -60,7 +65,7 @@ void SideBarWidget::setActive(const QString& entry_id) {
 
   if (current_id_.has_value()) {
     auto& prev = id_to_entry_[current_id_.value()];
-    if (prev.button) {
+    if (prev.button != nullptr) {
       prev.button->setChecked(false);
     }
     prev.last_width = stack_.isVisible() ? stack_.width() : prev.last_width;
@@ -74,12 +79,12 @@ void SideBarWidget::setActive(const QString& entry_id) {
                                .toStdString());
   }
 
-  auto& e = id_to_entry_[entry_id];
-  if (e.button && !e.button->isChecked()) {
-    e.button->setChecked(true);
+  auto& entry = id_to_entry_[entry_id];
+  if (entry.button != nullptr && !entry.button->isChecked()) {
+    entry.button->setChecked(true);
   }
 
-  stack_.setCurrentIndex(e.stack_index);
+  stack_.setCurrentIndex(entry.stack_index);
   stack_.setVisible(true);
 
   applyWidth();

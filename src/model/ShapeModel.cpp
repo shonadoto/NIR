@@ -1,9 +1,21 @@
 #include "model/ShapeModel.h"
 
+#include <memory>
+
+#include "model/MaterialModel.h"
+#include "model/core/ModelTypes.h"
+
+namespace {
+constexpr uint8_t kDefaultColorR = 128;
+constexpr uint8_t kDefaultColorG = 128;
+constexpr uint8_t kDefaultColorB = 128;
+constexpr uint8_t kDefaultColorA = 255;
+}  // namespace
+
 ShapeModel::ShapeModel(ShapeType type)
     : type_(type),
-      material_(std::make_shared<MaterialModel>(Color{128, 128, 128, 255})),
-      is_preset_material_(false) {}
+      material_(std::make_shared<MaterialModel>(Color{
+        kDefaultColorR, kDefaultColorG, kDefaultColorB, kDefaultColorA})) {}
 
 void ShapeModel::assign_material(
   const std::shared_ptr<MaterialModel>& material) {
@@ -14,9 +26,10 @@ void ShapeModel::assign_material(
 
 void ShapeModel::clear_material() {
   // Create new custom material with current color
-  Color currentColor =
-    material_ ? material_->color() : Color{128, 128, 128, 255};
-  material_ = std::make_shared<MaterialModel>(currentColor);
+  const Color current_color = material_ ? material_->color()
+                                        : Color{kDefaultColorR, kDefaultColorG,
+                                                kDefaultColorB, kDefaultColorA};
+  material_ = std::make_shared<MaterialModel>(current_color);
   is_preset_material_ = false;
   notify_change(ModelChange{ModelChange::Type::MaterialChanged, "material"});
 }

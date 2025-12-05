@@ -20,6 +20,14 @@ constexpr double kMinSizePx = 1.0;
 constexpr double kMaxSizePx = 10000.0;
 constexpr double kMinRotationDeg = -360.0;
 constexpr double kMaxRotationDeg = 360.0;
+constexpr int kDefaultColorR = 128;
+constexpr int kDefaultColorG = 128;
+constexpr int kDefaultColorB = 128;
+constexpr int kDefaultColorA = 128;
+constexpr double kRotationSpinStep = 5.0;
+constexpr int kGridPenAlpha = 255;
+constexpr double kGridPenWidth = 0.5;
+constexpr double kFullCircleDegrees = 360.0;
 // Grid ring parameters (as fraction of radius)
 constexpr double kInnerRingStartRatio =
   0.5;  // Inner ring starts at 50% of radius
@@ -34,12 +42,13 @@ EllipseItem::EllipseItem(const QRectF& rect, QGraphicsItem* parent)
   setFlags(QGraphicsItem::ItemIsSelectable | QGraphicsItem::ItemIsMovable |
            QGraphicsItem::ItemSendsGeometryChanges);
   setPen(QPen(Qt::black, 1.0));
-  setBrush(QBrush(QColor(128, 128, 128, 128)));
+  setBrush(QBrush(
+    QColor(kDefaultColorR, kDefaultColorG, kDefaultColorB, kDefaultColorA)));
   setTransformOriginPoint(boundingRect().center());
 }
 
 void EllipseItem::set_name(const QString& name) {
-  QString trimmed = name.trimmed();
+  const QString trimmed = name.trimmed();
   if (!trimmed.isEmpty()) {
     name_ = trimmed;
   }
@@ -57,9 +66,9 @@ QWidget* EllipseItem::create_properties_widget(QWidget* parent) {
   QObject::connect(widthSpin,
                    QOverload<double>::of(&QDoubleSpinBox::valueChanged), widget,
                    [this, widthSpin] {
-                     QRectF r = rect();
-                     r.setWidth(widthSpin->value());
-                     setRect(r);
+                     QRectF rect_item = rect();
+                     rect_item.setWidth(widthSpin->value());
+                     setRect(rect_item);
                      setTransformOriginPoint(boundingRect().center());
                      notify_geometry_changed();
                    });
@@ -71,9 +80,9 @@ QWidget* EllipseItem::create_properties_widget(QWidget* parent) {
   QObject::connect(heightSpin,
                    QOverload<double>::of(&QDoubleSpinBox::valueChanged), widget,
                    [this, heightSpin] {
-                     QRectF r = rect();
-                     r.setHeight(heightSpin->value());
-                     setRect(r);
+                     QRectF rect_item = rect();
+                     rect_item.setHeight(heightSpin->value());
+                     setRect(rect_item);
                      setTransformOriginPoint(boundingRect().center());
                      notify_geometry_changed();
                    });
@@ -81,7 +90,7 @@ QWidget* EllipseItem::create_properties_widget(QWidget* parent) {
   auto* rotationSpin = new QDoubleSpinBox(widget);
   rotationSpin->setRange(kMinRotationDeg, kMaxRotationDeg);
   rotationSpin->setDecimals(1);
-  rotationSpin->setSingleStep(5.0);
+  rotationSpin->setSingleStep(kRotationSpinStep);
   rotationSpin->setSuffix("°");
   rotationSpin->setValue(rotation());
   QObject::connect(rotationSpin,
@@ -106,8 +115,9 @@ QJsonObject EllipseItem::to_json() const {
   obj["rotation"] = rotation();
   obj["width"] = rect().width();
   obj["height"] = rect().height();
-  QColor c = brush().color();
-  obj["fill_color"] = QJsonArray{c.red(), c.green(), c.blue(), c.alpha()};
+  const QColor color = brush().color();
+  obj["fill_color"] =
+    QJsonArray{color.red(), color.green(), color.blue(), color.alpha()};
   return obj;
 }
 
@@ -116,23 +126,23 @@ void EllipseItem::from_json(const QJsonObject& json) {
     name_ = json["name"].toString();
   }
   if (json.contains("position")) {
-    QJsonArray p = json["position"].toArray();
-    setPos(p[0].toDouble(), p[1].toDouble());
+    QJsonArray position_array = json["position"].toArray();
+    setPos(position_array[0].toDouble(), position_array[1].toDouble());
   }
   if (json.contains("rotation")) {
     setRotation(json["rotation"].toDouble());
   }
   if (json.contains("width") && json.contains("height")) {
-    QRectF r = rect();
-    r.setWidth(json["width"].toDouble());
-    r.setHeight(json["height"].toDouble());
-    setRect(r);
+    QRectF rect_item = rect();
+    rect_item.setWidth(json["width"].toDouble());
+    rect_item.setHeight(json["height"].toDouble());
+    setRect(rect_item);
     setTransformOriginPoint(boundingRect().center());
   }
   if (json.contains("fill_color")) {
-    QJsonArray c = json["fill_color"].toArray();
-    setBrush(
-      QBrush(QColor(c[0].toInt(), c[1].toInt(), c[2].toInt(), c[3].toInt())));
+    QJsonArray color_array = json["fill_color"].toArray();
+    setBrush(QBrush(QColor(color_array[0].toInt(), color_array[1].toInt(),
+                           color_array[2].toInt(), color_array[3].toInt())));
   }
 }
 
@@ -163,7 +173,7 @@ void EllipseItem::paint(QPainter* painter,
   QGraphicsEllipseItem::paint(painter, option, widget);
 
   // Draw grid if material has Internal grid enabled (radial for ellipses)
-  if (material_model_ &&
+  if (material_model_ != nullptr &&
       material_model_->grid_type() == MaterialModel::GridType::Internal) {
     // Calculate extended rect for grid (includes outer ring)
     const QRectF baseRect = rect();
@@ -176,9 +186,9 @@ void EllipseItem::paint(QPainter* painter,
 }
 
 void EllipseItem::draw_radial_grid(QPainter* painter,
-                                   const QRectF& extendedRect,
+                                   const QRectF& /* extendedRect */,
                                    const QRectF& baseRect) const {
-  if (!material_model_) {
+  if (material_model_ == nullptr) {
     return;
   }
 
@@ -190,8 +200,8 @@ void EllipseItem::draw_radial_grid(QPainter* painter,
   // Use composition mode that doesn't darken - draw only lines, no fill
   painter->setCompositionMode(QPainter::CompositionMode_SourceOver);
   painter->setBrush(Qt::NoBrush);
-  QPen gridPen(QColor(0, 0, 0, 255));
-  gridPen.setWidthF(0.5);
+  QPen gridPen(QColor(0, 0, 0, kGridPenAlpha));
+  gridPen.setWidthF(kGridPenWidth);
   painter->setPen(gridPen);
 
   const QPointF center = baseRect.center();
@@ -214,10 +224,12 @@ void EllipseItem::draw_radial_grid(QPainter* painter,
     const qreal radians = qDegreesToRadians(angle);
     const qreal cosA = qCos(radians);
     const qreal sinA = qSin(radians);
-    const qreal a = halfWidth * scale;
-    const qreal b = halfHeight * scale;
-    const qreal r = (a * b) / qSqrt(b * b * cosA * cosA + a * a * sinA * sinA);
-    return center + QPointF(r * cosA, r * sinA);
+    const qreal ellipse_a = halfWidth * scale;
+    const qreal ellipse_b = halfHeight * scale;
+    const qreal radius =
+      (ellipse_a * ellipse_b) / qSqrt(ellipse_b * ellipse_b * cosA * cosA +
+                                      ellipse_a * ellipse_a * sinA * sinA);
+    return center + QPointF(radius * cosA, radius * sinA);
   };
 
   // Draw concentric ellipses first (so radial lines appear on top)
@@ -226,7 +238,7 @@ void EllipseItem::draw_radial_grid(QPainter* painter,
   const qreal innerRingWidth = innerRingEndRadius - innerRingStartRadius;
   const qreal innerSpacing =
     innerRingWidth / (freqConcentric + 1);  // +1 accounts for boundary ellipse
-  qreal firstInnerRadius =
+  const qreal firstInnerRadius =
     innerRingStartRadius + innerSpacing;  // First ellipse (closest to center)
   qreal currentInnerRadius = firstInnerRadius;
   while (currentInnerRadius < innerRingEndRadius - boundaryMargin) {
@@ -273,7 +285,7 @@ void EllipseItem::draw_radial_grid(QPainter* painter,
   // Precompute angles to avoid repeated calculations
   QVector<qreal> angles(numRadialLines);
   for (int i = 0; i < numRadialLines; ++i) {
-    angles[i] = (360.0 * i) / numRadialLines;
+    angles[i] = (kFullCircleDegrees * i) / numRadialLines;
   }
 
   for (int i = 0; i < numRadialLines; ++i) {
@@ -298,7 +310,7 @@ void EllipseItem::draw_radial_grid(QPainter* painter,
 }
 
 QRectF EllipseItem::boundingRect() const {
-  QRectF baseRect = QGraphicsEllipseItem::boundingRect();
+  const QRectF baseRect = QGraphicsEllipseItem::boundingRect();
   // Extend bounding rect to include outer grid ring
   // Use the actual rect() to get the ellipse's dimensions
   const qreal maxRadius = qMax(rect().width(), rect().height()) / 2.0;

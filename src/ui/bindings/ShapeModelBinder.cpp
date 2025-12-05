@@ -17,35 +17,37 @@
 #include "ui/utils/ColorUtils.h"
 
 namespace {
-Color color_from_item(const ISceneObject* item) {
-  if (auto graphicsItem = dynamic_cast<const QGraphicsItem*>(item)) {
-    if (auto rect = dynamic_cast<const QGraphicsRectItem*>(graphicsItem)) {
+auto ColorFromItem(const ISceneObject* item) -> Color {
+  if (const auto* graphics_item = dynamic_cast<const QGraphicsItem*>(item)) {
+    if (const auto* rect =
+          dynamic_cast<const QGraphicsRectItem*>(graphics_item)) {
       return to_model_color(rect->brush().color());
     }
-    if (auto ellipse =
-          dynamic_cast<const QGraphicsEllipseItem*>(graphicsItem)) {
+    if (const auto* ellipse =
+          dynamic_cast<const QGraphicsEllipseItem*>(graphics_item)) {
       return to_model_color(ellipse->brush().color());
     }
-    if (auto line = dynamic_cast<const QGraphicsLineItem*>(graphicsItem)) {
+    if (const auto* line =
+          dynamic_cast<const QGraphicsLineItem*>(graphics_item)) {
       return to_model_color(line->pen().color());
     }
   }
   return Color{};
 }
 
-void apply_color_to_item(ISceneObject* item, const Color& color) {
-  QColor qcolor = to_qcolor(color);
-  if (auto graphicsItem = dynamic_cast<QGraphicsItem*>(item)) {
-    if (auto rect = dynamic_cast<QGraphicsRectItem*>(graphicsItem)) {
+void ApplyColorToItem(ISceneObject* item, const Color& color) {
+  const QColor qcolor = to_qcolor(color);
+  if (auto* graphics_item = dynamic_cast<QGraphicsItem*>(item)) {
+    if (auto* rect = dynamic_cast<QGraphicsRectItem*>(graphics_item)) {
       QBrush brush = rect->brush();
       brush.setColor(qcolor);
       rect->setBrush(brush);
-    } else if (auto ellipse =
-                 dynamic_cast<QGraphicsEllipseItem*>(graphicsItem)) {
+    } else if (auto* ellipse =
+                 dynamic_cast<QGraphicsEllipseItem*>(graphics_item)) {
       QBrush brush = ellipse->brush();
       brush.setColor(qcolor);
       ellipse->setBrush(brush);
-    } else if (auto line = dynamic_cast<QGraphicsLineItem*>(graphicsItem)) {
+    } else if (auto* line = dynamic_cast<QGraphicsLineItem*>(graphics_item)) {
       QPen pen = line->pen();
       pen.setColor(qcolor);
       line->setPen(pen);
@@ -55,12 +57,12 @@ void apply_color_to_item(ISceneObject* item, const Color& color) {
   }
 }
 
-Point2D to_model_point(const QPointF& point) {
-  return Point2D{point.x(), point.y()};
+auto ToModelPoint(const QPointF& point) -> Point2D {
+  return {point.x(), point.y()};
 }
 
-QPointF to_qpoint(const Point2D& point) {
-  return QPointF(point.x, point.y);
+auto ToQPoint(const Point2D& point) -> QPointF {
+  return {point.x, point.y};
 }
 
 }  // namespace
@@ -70,38 +72,39 @@ ShapeModelBinder::ShapeModelBinder(DocumentModel& document)
 
 namespace {
 ShapeModel::ShapeType type_from_item(ISceneObject* item) {
-  if (dynamic_cast<RectangleItem*>(item)) {
+  if (dynamic_cast<RectangleItem*>(item) != nullptr) {
     return ShapeModel::ShapeType::Rectangle;
   }
-  if (dynamic_cast<EllipseItem*>(item)) {
+  if (dynamic_cast<EllipseItem*>(item) != nullptr) {
     return ShapeModel::ShapeType::Ellipse;
   }
-  if (dynamic_cast<CircleItem*>(item)) {
+  if (dynamic_cast<CircleItem*>(item) != nullptr) {
     return ShapeModel::ShapeType::Circle;
   }
-  if (dynamic_cast<StickItem*>(item)) {
+  if (dynamic_cast<StickItem*>(item) != nullptr) {
     return ShapeModel::ShapeType::Stick;
   }
   return ShapeModel::ShapeType::Rectangle;
 }
 }  // namespace
 
-std::shared_ptr<ShapeModel> ShapeModelBinder::bind_shape(ISceneObject* item) {
-  if (!item) {
+auto ShapeModelBinder::bind_shape(ISceneObject* item)
+  -> std::shared_ptr<ShapeModel> {
+  if (item == nullptr) {
     return nullptr;
   }
-  auto it = bindings_.find(item);
-  if (it != bindings_.end()) {
-    return it->second.model;
+  auto binding_iterator = bindings_.find(item);
+  if (binding_iterator != bindings_.end()) {
+    return binding_iterator->second.model;
   }
 
   auto model =
     document_.create_shape(type_from_item(item), item->name().toStdString());
   if (model->material()) {
-    model->material()->set_color(color_from_item(item));
+    model->material()->set_color(ColorFromItem(item));
   }
 
-  int connection_id = model->on_changed().connect(
+  const int connection_id = model->on_changed().connect(
     [this, item](const ModelChange& change) { handle_change(item, change); });
 
   bindings_[item] = Binding{model, connection_id};
@@ -109,21 +112,22 @@ std::shared_ptr<ShapeModel> ShapeModelBinder::bind_shape(ISceneObject* item) {
   update_model_geometry(item, model);
   item->set_geometry_changed_callback(
     [this, item] { on_item_geometry_changed(item); });
-  apply_color_to_item(item,
-                      model->material() ? model->material()->color() : Color{});
+  ApplyColorToItem(item,
+                   model->material() ? model->material()->color() : Color{});
   return model;
 }
 
-std::shared_ptr<ShapeModel> ShapeModelBinder::attach_shape(
-  ISceneObject* item, const std::shared_ptr<ShapeModel>& model) {
-  if (!item || !model) {
+auto ShapeModelBinder::attach_shape(ISceneObject* item,
+                                    const std::shared_ptr<ShapeModel>& model)
+  -> std::shared_ptr<ShapeModel> {
+  if (item == nullptr || model == nullptr) {
     return nullptr;
   }
-  if (bindings_.count(item)) {
+  if (bindings_.contains(item)) {
     return bindings_[item].model;
   }
 
-  int connection_id = model->on_changed().connect(
+  const int connection_id = model->on_changed().connect(
     [this, item](const ModelChange& change) { handle_change(item, change); });
 
   bindings_[item] = Binding{model, connection_id};
@@ -131,22 +135,22 @@ std::shared_ptr<ShapeModel> ShapeModelBinder::attach_shape(
   item->set_geometry_changed_callback(
     [this, item] { on_item_geometry_changed(item); });
   apply_geometry(item, model);
-  apply_color_to_item(item,
-                      model->material() ? model->material()->color() : Color{});
+  ApplyColorToItem(item,
+                   model->material() ? model->material()->color() : Color{});
   return model;
 }
 
-std::shared_ptr<ShapeModel> ShapeModelBinder::model_for(
-  ISceneObject* item) const {
-  auto it = bindings_.find(item);
-  if (it != bindings_.end()) {
-    return it->second.model;
+auto ShapeModelBinder::model_for(ISceneObject* item) const
+  -> std::shared_ptr<ShapeModel> {
+  auto binding_iterator = bindings_.find(item);
+  if (binding_iterator != bindings_.end()) {
+    return binding_iterator->second.model;
   }
   return nullptr;
 }
 
-QGraphicsItem* ShapeModelBinder::item_for(
-  const std::shared_ptr<ShapeModel>& model) const {
+auto ShapeModelBinder::item_for(const std::shared_ptr<ShapeModel>& model) const
+  -> QGraphicsItem* {
   for (const auto& entry : bindings_) {
     if (entry.second.model == model) {
       return dynamic_cast<QGraphicsItem*>(entry.first);
@@ -156,16 +160,16 @@ QGraphicsItem* ShapeModelBinder::item_for(
 }
 
 void ShapeModelBinder::unbind_shape(ISceneObject* item) {
-  auto it = bindings_.find(item);
-  if (it == bindings_.end()) {
+  auto binding_iterator = bindings_.find(item);
+  if (binding_iterator == bindings_.end()) {
     return;
   }
   item->clear_geometry_changed_callback();
-  detach_material_binding(it->second);
-  if (auto model = it->second.model) {
-    model->on_changed().disconnect(it->second.connection_id);
+  detach_material_binding(binding_iterator->second);
+  if (auto model = binding_iterator->second.model) {
+    model->on_changed().disconnect(binding_iterator->second.connection_id);
   }
-  bindings_.erase(it);
+  bindings_.erase(binding_iterator);
 }
 
 void ShapeModelBinder::clear_bindings() {
@@ -198,8 +202,8 @@ void ShapeModelBinder::handle_change(ISceneObject* item,
       update_material_binding(item, bindingIt->second);
       [[fallthrough]];
     case ModelChange::Type::ColorChanged: {
-      Color color = model->material() ? model->material()->color() : Color{};
-      apply_color_to_item(item, color);
+      const Color color = model->material() ? model->material()->color() : Color{};
+      ApplyColorToItem(item, color);
       break;
     }
     case ModelChange::Type::GeometryChanged:
@@ -210,16 +214,19 @@ void ShapeModelBinder::handle_change(ISceneObject* item,
   }
 }
 
+// NOLINTNEXTLINE(readability-convert-member-functions-to-static)
 void ShapeModelBinder::apply_name(ISceneObject* item, const std::string& name) {
   item->set_name(QString::fromStdString(name));
 }
 
+// NOLINTNEXTLINE(readability-convert-member-functions-to-static)
 void ShapeModelBinder::apply_color(ISceneObject* item, const Color& color) {
-  apply_color_to_item(item, color);
+  ApplyColorToItem(item, color);
 }
 
-Color ShapeModelBinder::extract_color(const ISceneObject* item) const {
-  return color_from_item(item);
+// NOLINTNEXTLINE(readability-convert-member-functions-to-static)
+auto ShapeModelBinder::extract_color(const ISceneObject* item) const -> Color {
+  return ColorFromItem(item);
 }
 
 void ShapeModelBinder::update_material_binding(ISceneObject* item,
@@ -239,18 +246,19 @@ void ShapeModelBinder::update_material_binding(ISceneObject* item,
       if (change.type != ModelChange::Type::ColorChanged) {
         return;
       }
-      auto it = bindings_.find(item);
-      if (it == bindings_.end()) {
+      auto binding_iterator = bindings_.find(item);
+      if (binding_iterator == bindings_.end()) {
         return;
       }
-      if (!it->second.bound_material ||
-          it->second.bound_material.get() != material_ptr) {
+      if (binding_iterator->second.bound_material == nullptr ||
+          binding_iterator->second.bound_material.get() != material_ptr) {
         return;
       }
-      apply_color(item, it->second.bound_material->color());
+      apply_color(item, binding_iterator->second.bound_material->color());
     });
 }
 
+// NOLINTNEXTLINE(readability-convert-member-functions-to-static)
 void ShapeModelBinder::detach_material_binding(Binding& binding) {
   if (binding.bound_material && binding.material_connection_id != 0) {
     binding.bound_material->on_changed().disconnect(
@@ -262,41 +270,41 @@ void ShapeModelBinder::detach_material_binding(Binding& binding) {
 
 void ShapeModelBinder::update_model_geometry(
   ISceneObject* item, const std::shared_ptr<ShapeModel>& model) {
-  if (!item || !model) {
+  if (item == nullptr || model == nullptr) {
     return;
   }
-  auto graphicsItem = dynamic_cast<QGraphicsItem*>(item);
-  if (!graphicsItem) {
+  auto* graphicsItem = dynamic_cast<QGraphicsItem*>(item);
+  if (graphicsItem == nullptr) {
     return;
   }
   auto bindingIt = bindings_.find(item);
   if (bindingIt != bindings_.end()) {
     bindingIt->second.suppress_model_geometry_signal = true;
   }
-  model->set_position(to_model_point(graphicsItem->pos()));
+  model->set_position(ToModelPoint(graphicsItem->pos()));
   model->set_rotation_deg(graphicsItem->rotation());
 
   // Check CircleItem first (before QGraphicsEllipseItem) since CircleItem
   // inherits from it
-  if (auto circleItem = dynamic_cast<CircleItem*>(item)) {
+  if (auto* circleItem = dynamic_cast<CircleItem*>(item)) {
     // Circle: rect().width() is diameter, model stores diameter x diameter
-    QRectF rect = circleItem->rect();
+    const QRectF rect = circleItem->rect();
     const qreal diameter =
       rect.width();  // For circle, width == height == diameter
     model->set_size(Size2D{diameter, diameter});
-  } else if (auto rectItem = dynamic_cast<QGraphicsRectItem*>(graphicsItem)) {
-    QRectF rect = rectItem->rect();
+  } else if (auto* rectItem = dynamic_cast<QGraphicsRectItem*>(graphicsItem)) {
+    const QRectF rect = rectItem->rect();
     model->set_size(Size2D{rect.width(), rect.height()});
-  } else if (auto ellipseItem =
+  } else if (auto* ellipseItem =
                dynamic_cast<QGraphicsEllipseItem*>(graphicsItem)) {
     // This handles EllipseItem (not CircleItem, as it's checked above)
-    QRectF rect = ellipseItem->rect();
+    const QRectF rect = ellipseItem->rect();
     model->set_size(Size2D{rect.width(), rect.height()});
-  } else if (auto lineItem = dynamic_cast<QGraphicsLineItem*>(graphicsItem)) {
+  } else if (auto* lineItem = dynamic_cast<QGraphicsLineItem*>(graphicsItem)) {
     const qreal length = lineItem->line().length();
     model->set_size(Size2D{length, lineItem->pen().widthF()});
   } else {
-    QSizeF size = graphicsItem->boundingRect().size();
+    const QSizeF size = graphicsItem->boundingRect().size();
     model->set_size(Size2D{size.width(), size.height()});
   }
 
@@ -307,69 +315,72 @@ void ShapeModelBinder::update_model_geometry(
 
 void ShapeModelBinder::apply_geometry(
   ISceneObject* item, const std::shared_ptr<ShapeModel>& model) {
-  if (!item || !model) {
+  if (item == nullptr || model == nullptr) {
     return;
   }
-  auto graphicsItem = dynamic_cast<QGraphicsItem*>(item);
-  if (!graphicsItem) {
+  auto* graphicsItem = dynamic_cast<QGraphicsItem*>(item);
+  if (graphicsItem == nullptr) {
     return;
   }
-  auto it = bindings_.find(item);
-  if (it != bindings_.end()) {
-    if (it->second.suppress_model_geometry_signal) {
+  auto binding_iterator = bindings_.find(item);
+  if (binding_iterator != bindings_.end()) {
+    if (binding_iterator->second.suppress_model_geometry_signal) {
       return;
     }
-    it->second.suppress_geometry_callback = true;
+    binding_iterator->second.suppress_geometry_callback = true;
   }
 
-  graphicsItem->setPos(to_qpoint(model->position()));
+  graphicsItem->setPos(ToQPoint(model->position()));
   graphicsItem->setRotation(model->rotation_deg());
 
   const Size2D size = model->size();
-  if (auto rectItem = dynamic_cast<QGraphicsRectItem*>(graphicsItem)) {
+  constexpr double kDiameterMultiplier = 2.0;
+  if (auto* rectItem = dynamic_cast<QGraphicsRectItem*>(graphicsItem)) {
     QRectF rect = rectItem->rect();
     rect.setWidth(size.width);
     rect.setHeight(size.height);
     rectItem->setRect(rect);
     rectItem->setTransformOriginPoint(rectItem->boundingRect().center());
-  } else if (auto circleItem = dynamic_cast<CircleItem*>(item)) {
+  } else if (auto* circleItem = dynamic_cast<CircleItem*>(item)) {
     // Circle: size stores diameter x diameter, rect must be centered at (0,0)
     const qreal radius = size.width / 2.0;
-    circleItem->setRect(QRectF(-radius, -radius, 2.0 * radius, 2.0 * radius));
+    circleItem->setRect(QRectF(-radius, -radius, kDiameterMultiplier * radius,
+                               kDiameterMultiplier * radius));
     // Circle is always centered at (0,0), so transform origin is at (0,0)
     // relative to item
     circleItem->setTransformOriginPoint(QPointF(0, 0));
-  } else if (auto ellipseItem =
+  } else if (auto* ellipseItem =
                dynamic_cast<QGraphicsEllipseItem*>(graphicsItem)) {
     QRectF rect = ellipseItem->rect();
     rect.setWidth(size.width);
     rect.setHeight(size.height);
     ellipseItem->setRect(rect);
     ellipseItem->setTransformOriginPoint(ellipseItem->boundingRect().center());
-  } else if (auto lineItem = dynamic_cast<QGraphicsLineItem*>(graphicsItem)) {
+  } else if (auto* lineItem = dynamic_cast<QGraphicsLineItem*>(graphicsItem)) {
     const qreal halfLength = size.width / 2.0;
     lineItem->setLine(QLineF(-halfLength, 0.0, halfLength, 0.0));
     lineItem->setTransformOriginPoint(lineItem->boundingRect().center());
     // For stick items, keep fixed pen width
-    if (dynamic_cast<StickItem*>(item)) {
-      QPen p = lineItem->pen();
-      p.setWidthF(2.0);  // Fixed width for stick
-      lineItem->setPen(p);
+    constexpr double kStickPenWidth = 2.0;
+    if (dynamic_cast<StickItem*>(item) != nullptr) {
+      QPen pen = lineItem->pen();
+      pen.setWidthF(kStickPenWidth);  // Fixed width for stick
+      lineItem->setPen(pen);
     }
   }
 
-  if (it != bindings_.end()) {
-    it->second.suppress_geometry_callback = false;
+  if (binding_iterator != bindings_.end()) {
+    binding_iterator->second.suppress_geometry_callback = false;
   }
 }
 
 void ShapeModelBinder::on_item_geometry_changed(ISceneObject* item) {
-  auto it = bindings_.find(item);
-  if (it == bindings_.end()) {
+  auto binding_iterator = bindings_.find(item);
+  if (binding_iterator == bindings_.end()) {
     return;
   }
-  if (it->second.suppress_geometry_callback) {
+  if (binding_iterator->second.suppress_geometry_callback) {
     return;
   }
-  update_model_geometry(item, it->second.model);
+  update_model_geometry(item, binding_iterator->second.model);
 }

@@ -19,11 +19,13 @@ class ShapeModelBinder {
  public:
   explicit ShapeModelBinder(DocumentModel& document);
 
-  std::shared_ptr<ShapeModel> bind_shape(ISceneObject* item);
-  std::shared_ptr<ShapeModel> attach_shape(
-    ISceneObject* item, const std::shared_ptr<ShapeModel>& model);
-  std::shared_ptr<ShapeModel> model_for(ISceneObject* item) const;
-  QGraphicsItem* item_for(const std::shared_ptr<ShapeModel>& model) const;
+  auto bind_shape(ISceneObject* item) -> std::shared_ptr<ShapeModel>;
+  auto attach_shape(ISceneObject* item,
+                    const std::shared_ptr<ShapeModel>& model)
+    -> std::shared_ptr<ShapeModel>;
+  auto model_for(ISceneObject* item) const -> std::shared_ptr<ShapeModel>;
+  auto item_for(const std::shared_ptr<ShapeModel>& model) const
+    -> QGraphicsItem*;
   void unbind_shape(ISceneObject* item);
   void clear_bindings();
 
@@ -40,7 +42,7 @@ class ShapeModelBinder {
   void handle_change(ISceneObject* item, const ModelChange& change);
   void apply_name(ISceneObject* item, const std::string& name);
   void apply_color(ISceneObject* item, const Color& color);
-  Color extract_color(const ISceneObject* item) const;
+  auto extract_color(const ISceneObject* item) const -> Color;
   void update_material_binding(ISceneObject* item, Binding& binding);
   void detach_material_binding(Binding& binding);
   void update_model_geometry(ISceneObject* item,

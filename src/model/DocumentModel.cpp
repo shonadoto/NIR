@@ -1,6 +1,14 @@
 #include "model/DocumentModel.h"
 
 #include <algorithm>
+#include <memory>
+#include <string>
+#include <vector>
+
+#include "model/MaterialModel.h"
+#include "model/ShapeModel.h"
+#include "model/SubstrateModel.h"
+#include "model/core/ModelTypes.h"
 
 DocumentModel::DocumentModel()
     : substrate_(std::make_shared<SubstrateModel>()) {
@@ -8,8 +16,9 @@ DocumentModel::DocumentModel()
     [this](const ModelChange& change) { notify_all(change); });
 }
 
-std::shared_ptr<ShapeModel> DocumentModel::create_shape(
-  ShapeModel::ShapeType type, const std::string& name) {
+auto DocumentModel::create_shape(ShapeModel::ShapeType type,
+                                 const std::string& name)
+  -> std::shared_ptr<ShapeModel> {
   auto shape = std::make_shared<ShapeModel>(type);
   if (!name.empty()) {
     shape->set_name(name);
@@ -32,8 +41,8 @@ void DocumentModel::clear_shapes() {
   notify_all(ModelChange{ModelChange::Type::Custom, "shapes_cleared"});
 }
 
-std::shared_ptr<MaterialModel> DocumentModel::create_material(
-  const Color& color, const std::string& name) {
+auto DocumentModel::create_material(const Color& color, const std::string& name)
+  -> std::shared_ptr<MaterialModel> {
   auto material = std::make_shared<MaterialModel>(color);
   if (!name.empty()) {
     material->set_name(name);

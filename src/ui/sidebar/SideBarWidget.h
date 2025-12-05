@@ -16,8 +16,8 @@ class SideBarWidget : public QWidget {
   explicit SideBarWidget(QWidget* parent = nullptr);
   ~SideBarWidget() override;
 
-  void registerSidebar(const QString& id, const QIcon& icon, QWidget* content,
-                       int preferredWidth = 280);
+  void registerSidebar(const QString& sidebar_id, const QIcon& icon,
+                       QWidget* content, int preferredWidth = 280);
 
  private:
   struct Entry {

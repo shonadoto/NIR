@@ -13,16 +13,16 @@ class DocumentModel {
  public:
   DocumentModel();
 
-  std::shared_ptr<ShapeModel> create_shape(ShapeModel::ShapeType type,
-                                           const std::string& name = {});
+  auto create_shape(ShapeModel::ShapeType type, const std::string& name = {})
+    -> std::shared_ptr<ShapeModel>;
   void remove_shape(const std::shared_ptr<ShapeModel>& shape);
   void clear_shapes();
   const std::vector<std::shared_ptr<ShapeModel>>& shapes() const {
     return shapes_;
   }
 
-  std::shared_ptr<MaterialModel> create_material(const Color& color = {},
-                                                 const std::string& name = {});
+  auto create_material(const Color& color = {}, const std::string& name = {})
+    -> std::shared_ptr<MaterialModel>;
   void remove_material(const std::shared_ptr<MaterialModel>& material);
   void clear_materials();
   const std::vector<std::shared_ptr<MaterialModel>>& materials() const {

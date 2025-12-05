@@ -17,14 +17,12 @@ class EditorArea : public QWidget {
   }
   void fit_to_substrate();
   void set_substrate_size(const QSizeF& size);
-  QSizeF substrate_size() const;
+  auto substrate_size() const -> QSizeF;
   SubstrateItem* substrate_item() const {
     return substrate_;
   }
-  QGraphicsScene* scene() const {
-    return scene_;
-  }
-  QPointF substrate_center() const;
+  auto scene() const -> QGraphicsScene*;
+  auto substrate_center() const -> QPointF;
 
  private:
   void init_scene();

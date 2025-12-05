@@ -11,18 +11,22 @@ namespace {
 constexpr int kDefaultSubstrateWidth = 1000;
 constexpr int kDefaultSubstrateHeight = 1000;
 }  // namespace
-EditorArea::EditorArea(QWidget* parent) : QWidget(parent) {
+EditorArea::EditorArea(QWidget* parent)
+    : QWidget(parent), view_(new EditorView(this)) {
   auto* layout = new QVBoxLayout(this);
   layout->setContentsMargins(0, 0, 0, 0);
   layout->setSpacing(0);
 
-  view_ = new EditorView(this);
   layout->addWidget(view_);
 
   init_scene();
 }
 
 EditorArea::~EditorArea() = default;
+
+auto EditorArea::scene() const -> QGraphicsScene* {
+  return scene_;
+}
 
 void EditorArea::init_scene() {
   scene_ = new QGraphicsScene(this);
@@ -52,16 +56,16 @@ void EditorArea::set_substrate_size(const QSizeF& size) {
   fit_to_substrate();
 }
 
-QSizeF EditorArea::substrate_size() const {
+auto EditorArea::substrate_size() const -> QSizeF {
   if (substrate_ == nullptr) {
-    return QSizeF();
+    return {};
   }
   return substrate_->size();
 }
 
-QPointF EditorArea::substrate_center() const {
+auto EditorArea::substrate_center() const -> QPointF {
   if (substrate_ == nullptr) {
-    return QPointF(0, 0);
+    return {0, 0};
   }
   return substrate_->sceneBoundingRect().center();
 }

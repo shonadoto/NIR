@@ -25,7 +25,7 @@ struct TreeNode {
 
 class ObjectTreeModel : public QAbstractItemModel {
   Q_OBJECT
- public:
+public:
   explicit ObjectTreeModel(QObject* parent = nullptr);
   ~ObjectTreeModel() override;
 
@@ -39,8 +39,8 @@ class ObjectTreeModel : public QAbstractItemModel {
   QModelIndex parent(const QModelIndex& child) const override;
   int rowCount(const QModelIndex& parent) const override;
   int columnCount(const QModelIndex& parent) const override;
-  QVariant data(const QModelIndex& index, int role) const override;
-  Qt::ItemFlags flags(const QModelIndex& index) const override;
+  QVariant data(const QModelIndex& idx, int role) const override;
+  Qt::ItemFlags flags(const QModelIndex& idx) const override;
   QVariant headerData(int section, Qt::Orientation orientation,
                       int role) const override;
   bool setData(const QModelIndex& index, const QVariant& value,
@@ -66,7 +66,7 @@ class ObjectTreeModel : public QAbstractItemModel {
     return document_;
   }
 
- private:
+private:
   // Helper methods
   TreeNode* node_from_index(const QModelIndex& index) const;
   QModelIndex create_index_for_node(TreeNode* node, int row, int column) const;

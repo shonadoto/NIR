@@ -2,10 +2,16 @@
 
 #include <algorithm>
 
-Size2D ShapeSizeConverter::convert(ShapeModel::ShapeType from,
-                                   ShapeModel::ShapeType to,
-                                   const Size2D& size) {
-  if (from == to) {
+#include "model/core/ModelTypes.h"
+
+namespace {
+constexpr double kMinSizeThreshold = 1.0;
+}  // namespace
+
+auto ShapeSizeConverter::convert(ShapeModel::ShapeType from,
+                                 ShapeModel::ShapeType to_type,
+                                 const Size2D& size) -> Size2D {
+  if (from == to_type) {
     return size;
   }
 
@@ -14,7 +20,7 @@ Size2D ShapeSizeConverter::convert(ShapeModel::ShapeType from,
       // Circle: size stores diameter x diameter
       const double diameter =
         size.width;  // Both width and height are the same (diameter)
-      switch (to) {
+      switch (to_type) {
         case ShapeModel::ShapeType::Ellipse:
         case ShapeModel::ShapeType::Rectangle:
           // Use diameter as both width and height (square shape)
@@ -28,7 +34,7 @@ Size2D ShapeSizeConverter::convert(ShapeModel::ShapeType from,
     case ShapeModel::ShapeType::Ellipse:
     case ShapeModel::ShapeType::Rectangle: {
       // Ellipse/Rectangle: size stores width x height
-      switch (to) {
+      switch (to_type) {
         case ShapeModel::ShapeType::Circle: {
           // Use max dimension as diameter
           const double diameter = std::max(size.width, size.height);
@@ -50,7 +56,7 @@ Size2D ShapeSizeConverter::convert(ShapeModel::ShapeType from,
       // Stick: size stores length x thickness (thickness is always
       // kStickThickness)
       const double length = size.width;
-      switch (to) {
+      switch (to_type) {
         case ShapeModel::ShapeType::Circle: {
           // Use length as diameter
           return Size2D{length, length};
@@ -68,32 +74,32 @@ Size2D ShapeSizeConverter::convert(ShapeModel::ShapeType from,
   }
 }
 
-Size2D ShapeSizeConverter::ensure_minimum(const Size2D& size,
-                                          ShapeModel::ShapeType type) {
+auto ShapeSizeConverter::ensure_minimum(const Size2D& size,
+                                        ShapeModel::ShapeType type) -> Size2D {
   Size2D result = size;
 
   switch (type) {
     case ShapeModel::ShapeType::Circle: {
-      if (result.width < 1.0) {
+      if (result.width < kMinSizeThreshold) {
         result.width = ShapeConstants::kMinCircleSize;
       }
-      if (result.height < 1.0) {
+      if (result.height < kMinSizeThreshold) {
         result.height = result.width;  // Circle must be square
       }
       break;
     }
     case ShapeModel::ShapeType::Rectangle:
     case ShapeModel::ShapeType::Ellipse: {
-      if (result.width < 1.0) {
+      if (result.width < kMinSizeThreshold) {
         result.width = ShapeConstants::kMinRectangleWidth;
       }
-      if (result.height < 1.0) {
+      if (result.height < kMinSizeThreshold) {
         result.height = ShapeConstants::kMinRectangleHeight;
       }
       break;
     }
     case ShapeModel::ShapeType::Stick: {
-      if (result.width < 1.0) {
+      if (result.width < kMinSizeThreshold) {
         result.width = ShapeConstants::kMinRectangleWidth;
       }
       // Thickness is fixed, don't change it

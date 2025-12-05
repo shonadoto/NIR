@@ -20,6 +20,13 @@ constexpr double kMinSizePx = 1.0;
 constexpr double kMaxSizePx = 10000.0;
 constexpr double kMinRotationDeg = -360.0;
 constexpr double kMaxRotationDeg = 360.0;
+constexpr int kDefaultColorR = 128;
+constexpr int kDefaultColorG = 128;
+constexpr int kDefaultColorB = 128;
+constexpr int kDefaultColorA = 128;
+constexpr double kRotationSpinStep = 5.0;
+constexpr int kGridPenAlpha = 255;
+constexpr double kGridPenWidth = 0.5;
 }  // namespace
 
 RectangleItem::RectangleItem(const QRectF& rect, QGraphicsItem* parent)
@@ -27,12 +34,13 @@ RectangleItem::RectangleItem(const QRectF& rect, QGraphicsItem* parent)
   setFlags(QGraphicsItem::ItemIsSelectable | QGraphicsItem::ItemIsMovable |
            QGraphicsItem::ItemSendsGeometryChanges);
   setPen(QPen(Qt::black, 1.0));
-  setBrush(QBrush(QColor(128, 128, 128, 128)));
+  setBrush(QBrush(
+    QColor(kDefaultColorR, kDefaultColorG, kDefaultColorB, kDefaultColorA)));
   setTransformOriginPoint(boundingRect().center());
 }
 
 void RectangleItem::set_name(const QString& name) {
-  QString trimmed = name.trimmed();
+  const QString trimmed = name.trimmed();
   if (!trimmed.isEmpty()) {
     name_ = trimmed;
   }
@@ -50,9 +58,9 @@ QWidget* RectangleItem::create_properties_widget(QWidget* parent) {
   QObject::connect(widthSpin,
                    QOverload<double>::of(&QDoubleSpinBox::valueChanged), widget,
                    [this, widthSpin] {
-                     QRectF r = rect();
-                     r.setWidth(widthSpin->value());
-                     setRect(r);
+                     QRectF rect_item = rect();
+                     rect_item.setWidth(widthSpin->value());
+                     setRect(rect_item);
                      setTransformOriginPoint(boundingRect().center());
                      notify_geometry_changed();
                    });
@@ -64,9 +72,9 @@ QWidget* RectangleItem::create_properties_widget(QWidget* parent) {
   QObject::connect(heightSpin,
                    QOverload<double>::of(&QDoubleSpinBox::valueChanged), widget,
                    [this, heightSpin] {
-                     QRectF r = rect();
-                     r.setHeight(heightSpin->value());
-                     setRect(r);
+                     QRectF rect_item = rect();
+                     rect_item.setHeight(heightSpin->value());
+                     setRect(rect_item);
                      setTransformOriginPoint(boundingRect().center());
                      notify_geometry_changed();
                    });
@@ -74,7 +82,7 @@ QWidget* RectangleItem::create_properties_widget(QWidget* parent) {
   auto* rotationSpin = new QDoubleSpinBox(widget);
   rotationSpin->setRange(kMinRotationDeg, kMaxRotationDeg);
   rotationSpin->setDecimals(1);
-  rotationSpin->setSingleStep(5.0);
+  rotationSpin->setSingleStep(kRotationSpinStep);
   rotationSpin->setSuffix("°");
   rotationSpin->setValue(rotation());
   QObject::connect(rotationSpin,
@@ -99,8 +107,9 @@ QJsonObject RectangleItem::to_json() const {
   obj["rotation"] = rotation();
   obj["width"] = rect().width();
   obj["height"] = rect().height();
-  QColor c = brush().color();
-  obj["fill_color"] = QJsonArray{c.red(), c.green(), c.blue(), c.alpha()};
+  const QColor color = brush().color();
+  obj["fill_color"] =
+    QJsonArray{color.red(), color.green(), color.blue(), color.alpha()};
   return obj;
 }
 
@@ -109,23 +118,23 @@ void RectangleItem::from_json(const QJsonObject& json) {
     name_ = json["name"].toString();
   }
   if (json.contains("position")) {
-    QJsonArray p = json["position"].toArray();
-    setPos(p[0].toDouble(), p[1].toDouble());
+    QJsonArray position_array = json["position"].toArray();
+    setPos(position_array[0].toDouble(), position_array[1].toDouble());
   }
   if (json.contains("rotation")) {
     setRotation(json["rotation"].toDouble());
   }
   if (json.contains("width") && json.contains("height")) {
-    QRectF r = rect();
-    r.setWidth(json["width"].toDouble());
-    r.setHeight(json["height"].toDouble());
-    setRect(r);
+    QRectF rect_item = rect();
+    rect_item.setWidth(json["width"].toDouble());
+    rect_item.setHeight(json["height"].toDouble());
+    setRect(rect_item);
     setTransformOriginPoint(boundingRect().center());
   }
   if (json.contains("fill_color")) {
-    QJsonArray c = json["fill_color"].toArray();
-    setBrush(
-      QBrush(QColor(c[0].toInt(), c[1].toInt(), c[2].toInt(), c[3].toInt())));
+    QJsonArray color_array = json["fill_color"].toArray();
+    setBrush(QBrush(QColor(color_array[0].toInt(), color_array[1].toInt(),
+                           color_array[2].toInt(), color_array[3].toInt())));
   }
 }
 
@@ -156,7 +165,7 @@ void RectangleItem::paint(QPainter* painter,
   QGraphicsRectItem::paint(painter, option, widget);
 
   // Draw grid if material has Internal grid enabled
-  if (material_model_ &&
+  if (material_model_ != nullptr &&
       material_model_->grid_type() == MaterialModel::GridType::Internal) {
     draw_internal_grid(painter, rect());
   }
@@ -164,7 +173,7 @@ void RectangleItem::paint(QPainter* painter,
 
 void RectangleItem::draw_internal_grid(QPainter* painter,
                                        const QRectF& rect) const {
-  if (!material_model_) {
+  if (material_model_ == nullptr) {
     return;
   }
 
@@ -172,8 +181,8 @@ void RectangleItem::draw_internal_grid(QPainter* painter,
 
   // Draw only lines, no fill
   painter->setBrush(Qt::NoBrush);
-  QPen gridPen(QColor(0, 0, 0, 255));  // Black lines
-  gridPen.setWidthF(0.5);
+  QPen gridPen(QColor(0, 0, 0, kGridPenAlpha));  // Black lines
+  gridPen.setWidthF(kGridPenWidth);
   painter->setPen(gridPen);
 
   const double freqX = material_model_->grid_frequency_x();  // Horizontal cells
@@ -184,17 +193,19 @@ void RectangleItem::draw_internal_grid(QPainter* painter,
   const qreal spacingY = rect.height() / freqY;
 
   // Draw vertical lines (horizontal spacing)
-  qreal x = rect.left() + spacingX;
-  while (x <= rect.right()) {
-    painter->drawLine(QPointF(x, rect.top()), QPointF(x, rect.bottom()));
-    x += spacingX;
+  qreal x_pos = rect.left() + spacingX;
+  while (x_pos <= rect.right()) {
+    painter->drawLine(QPointF(x_pos, rect.top()),
+                      QPointF(x_pos, rect.bottom()));
+    x_pos += spacingX;
   }
 
   // Draw horizontal lines (vertical spacing)
-  qreal y = rect.top() + spacingY;
-  while (y <= rect.bottom()) {
-    painter->drawLine(QPointF(rect.left(), y), QPointF(rect.right(), y));
-    y += spacingY;
+  qreal y_pos = rect.top() + spacingY;
+  while (y_pos <= rect.bottom()) {
+    painter->drawLine(QPointF(rect.left(), y_pos),
+                      QPointF(rect.right(), y_pos));
+    y_pos += spacingY;
   }
 
   painter->restore();

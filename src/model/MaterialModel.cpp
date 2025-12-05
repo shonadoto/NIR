@@ -1,5 +1,7 @@
 #include "model/MaterialModel.h"
 
+#include "model/core/ModelTypes.h"
+
 MaterialModel::MaterialModel(const Color& color) : color_(color) {}
 
 void MaterialModel::set_color(const Color& color) {

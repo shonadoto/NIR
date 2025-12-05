@@ -2,21 +2,28 @@
 #include <spdlog/sinks/basic_file_sink.h>
 #include <spdlog/sinks/stdout_color_sinks.h>
 #include <spdlog/spdlog.h>
-#include <unistd.h>
 
 #include <QApplication>
 #include <QDir>
 #include <QFileInfo>
 #include <QIcon>
 #include <QStandardPaths>
+#include <QString>
+#include <array>
 #include <csignal>
 #include <cstdlib>
+#include <format>
+#include <vector>
 
 #include "ui/MainWindow.h"
 #include "utils/Logging.h"
 
+namespace {
+constexpr int kMaxStackTraceFrames = 50;
+}  // namespace
+
 // Signal handler for crash diagnostics
-void crash_handler(int sig) {
+auto CrashHandler(int sig) -> void {
   const char* signal_name = "UNKNOWN";
   switch (sig) {
     case SIGSEGV:
@@ -34,49 +41,62 @@ void crash_handler(int sig) {
     case SIGBUS:
       signal_name = "SIGBUS";
       break;
+    default:
+      signal_name = "UNKNOWN";
+      break;
   }
 
   LOG_CRITICAL() << "Received signal: " << signal_name << " (" << sig << ")";
 
   // Print stack trace
-  void* array[50];
-  size_t size = backtrace(array, 50);
+  std::array<void*, kMaxStackTraceFrames> array{};
+  const size_t size = backtrace(array.data(), kMaxStackTraceFrames);
 
   LOG_CRITICAL() << "Stack trace (" << size << " frames):";
-  char** messages = backtrace_symbols(array, size);
-  for (size_t i = 0; i < size; i++) {
-    LOG_CRITICAL() << "  [" << i << "] " << (messages[i] ? messages[i] : "?");
+  // NOLINTNEXTLINE(cppcoreguidelines-owning-memory,
+  // bugprone-multi-level-implicit-pointer-conversion) backtrace_symbols is a C
+  // library function that uses malloc and returns char** The conversion from
+  // char** to void* is required by the C API
+  // NOLINTNEXTLINE(bugprone-multi-level-implicit-pointer-conversion)
+  void* messages_void = backtrace_symbols(array.data(), static_cast<int>(size));
+  // NOLINTNEXTLINE(bugprone-multi-level-implicit-pointer-conversion)
+  char** messages = static_cast<char**>(messages_void);
+  if (messages != nullptr) {
+    for (size_t i = 0; i < size; i++) {
+      LOG_CRITICAL() << "  [" << i << "] "
+                     << (messages[i] != nullptr ? messages[i] : "?");
+    }
+    // NOLINTNEXTLINE(cppcoreguidelines-no-malloc,bugprone-multi-level-implicit-pointer-conversion)
+    free(messages);
   }
-  free(messages);
 
   spdlog::shutdown();
   std::abort();
 }
-#include <format>
 
-void setup_logging() {
+auto SetupLogging() -> void {
   // Get log file path
-  QString appName = QApplication::applicationName();
-  if (appName.isEmpty()) {
-    appName = "NIRMaterialEditor";
+  QString app_name = QApplication::applicationName();
+  if (app_name.isEmpty()) {
+    app_name = "NIRMaterialEditor";
   }
 
-  QString dataDir =
+  QString data_dir =
     QStandardPaths::writableLocation(QStandardPaths::AppDataLocation);
-  if (dataDir.isEmpty()) {
-    dataDir = QDir::currentPath();
+  if (data_dir.isEmpty()) {
+    data_dir = QDir::currentPath();
   }
 
-  QDir dir(dataDir);
+  const QDir dir(data_dir);
   if (!dir.exists()) {
     dir.mkpath(".");
   }
 
-  QString logPath = dir.absoluteFilePath(appName + "_log.txt");
+  const QString log_path = dir.absoluteFilePath(app_name + "_log.txt");
 
   // Create file sink
   auto file_sink = std::make_shared<spdlog::sinks::basic_file_sink_mt>(
-    logPath.toStdString(), true);
+    log_path.toStdString(), true);
   file_sink->set_level(spdlog::level::trace);
 
   // Create console sink
@@ -93,30 +113,34 @@ void setup_logging() {
   logger->set_pattern("[%Y-%m-%d %H:%M:%S.%e] [%^%l%$] [%s:%#] %v");
 
   spdlog::set_default_logger(logger);
-  LOG_INFO_FMT("Logging initialized. Log file: {}", logPath.toStdString());
+  LOG_INFO_FMT("Logging initialized. Log file: {}", log_path.toStdString());
 }
 
-int main(int argc, char* argv[]) {
+auto main(int argc, char* argv[]) -> int {
   // Install signal handlers for crash diagnostics
-  std::signal(SIGSEGV, crash_handler);
-  std::signal(SIGABRT, crash_handler);
-  std::signal(SIGFPE, crash_handler);
-  std::signal(SIGILL, crash_handler);
-  std::signal(SIGBUS, crash_handler);
+  std::signal(SIGSEGV, CrashHandler);
+  std::signal(SIGABRT, CrashHandler);
+  std::signal(SIGFPE, CrashHandler);
+  std::signal(SIGILL, CrashHandler);
+  std::signal(SIGBUS, CrashHandler);
 
+  // QApplication cannot be const because exec() modifies internal state
+  // NOLINTNEXTLINE(misc-const-correctness)
   QApplication app(argc, argv);
-  app.setApplicationName("NIRMaterialEditor");
-  app.setWindowIcon(QIcon(":/icons/app.svg"));
+  QApplication::setApplicationName("NIRMaterialEditor");
+  QApplication::setWindowIcon(QIcon(":/icons/app.svg"));
 
-  setup_logging();
+  SetupLogging();
   LOG_INFO() << "Application starting";
 
-  MainWindow mainWindow;
-  mainWindow.show();
+  MainWindow main_window;
+  main_window.show();
 
   LOG_INFO() << "MainWindow shown, entering event loop";
 
-  int result = app.exec();
+  // app.exec() modifies internal state, so app cannot be const
+  // NOLINTNEXTLINE(readability-static-accessed-through-instance)
+  const int result = app.exec();
 
   LOG_INFO() << "Application exiting with code: " << result;
   spdlog::shutdown();

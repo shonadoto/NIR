@@ -9,7 +9,10 @@
 
 namespace {
 constexpr qreal kOutlineWidthPx = 1.0;
-}
+constexpr int kSubstratePenColorR = 180;
+constexpr int kSubstratePenColorG = 180;
+constexpr int kSubstratePenColorB = 180;
+}  // namespace
 
 SubstrateItem::SubstrateItem(const QSizeF& size) : size_(size) {
   setFlag(QGraphicsItem::ItemIsSelectable, true);
@@ -18,14 +21,14 @@ SubstrateItem::SubstrateItem(const QSizeF& size) : size_(size) {
 }
 
 void SubstrateItem::set_name(const QString& name) {
-  QString trimmed = name.trimmed();
+  const QString trimmed = name.trimmed();
   if (!trimmed.isEmpty()) {
     name_ = trimmed;
   }
 }
 
-QRectF SubstrateItem::boundingRect() const {
-  return QRectF(QPointF(0, 0), size_);
+auto SubstrateItem::boundingRect() const -> QRectF {
+  return {QPointF(0, 0), size_};
 }
 
 void SubstrateItem::paint(QPainter* painter, const QStyleOptionGraphicsItem*,
@@ -38,7 +41,8 @@ void SubstrateItem::paint(QPainter* painter, const QStyleOptionGraphicsItem*,
   painter->fillRect(rect, fill_color_);
 
   // Outline
-  QPen pen(QColor(180, 180, 180));
+  QPen pen(
+    QColor(kSubstratePenColorR, kSubstratePenColorG, kSubstratePenColorB));
   pen.setWidthF(kOutlineWidthPx);
   painter->setPen(pen);
   painter->drawRect(rect);
@@ -57,17 +61,17 @@ void SubstrateItem::set_fill_color(const QColor& color) {
   update();
 }
 
-QWidget* SubstrateItem::create_properties_widget(QWidget* parent) {
+auto SubstrateItem::create_properties_widget(QWidget* parent) -> QWidget* {
   auto* widget = new QWidget(parent);
   auto* form = new QFormLayout(widget);
   form->setContentsMargins(0, 0, 0, 0);
 
   auto* colorBtn = new QPushButton("Choose Color", widget);
   QObject::connect(colorBtn, &QPushButton::clicked, widget, [this, colorBtn] {
-    QColor c =
+    const QColor color =
       QColorDialog::getColor(fill_color_, colorBtn, "Choose Substrate Color");
-    if (c.isValid()) {
-      set_fill_color(c);
+    if (color.isValid()) {
+      set_fill_color(color);
     }
   });
 
@@ -95,8 +99,8 @@ void SubstrateItem::from_json(const QJsonObject& json) {
     set_size(QSizeF(json["width"].toDouble(), json["height"].toDouble()));
   }
   if (json.contains("fill_color")) {
-    QJsonArray c = json["fill_color"].toArray();
-    set_fill_color(
-      QColor(c[0].toInt(), c[1].toInt(), c[2].toInt(), c[3].toInt()));
+    QJsonArray color_array = json["fill_color"].toArray();
+    set_fill_color(QColor(color_array[0].toInt(), color_array[1].toInt(),
+                          color_array[2].toInt(), color_array[3].toInt()));
   }
 }

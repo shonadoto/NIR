@@ -39,16 +39,17 @@ void EditorView::fitToItem(const QGraphicsItem* item) {
   if (item == nullptr) {
     return;
   }
-  const QRectF br = item->sceneBoundingRect();
-  if (br.isEmpty()) {
+  const QRectF bounding_rect = item->sceneBoundingRect();
+  if (bounding_rect.isEmpty()) {
     return;
   }
-  fitInView(br, Qt::KeepAspectRatio);
+  fitInView(bounding_rect, Qt::KeepAspectRatio);
   centerOn(item);
   // Update scale_ to reflect current transform approximately
   scale_ = transform().m11();
 }
 
+// NOLINTNEXTLINE(readability-function-cognitive-complexity)
 void EditorView::wheelEvent(QWheelEvent* event) {
   const QPoint num_degrees = event->angleDelta() / 8;
   if (num_degrees.y() == 0) {
@@ -60,11 +61,11 @@ void EditorView::wheelEvent(QWheelEvent* event) {
   const auto mods = event->modifiers();
 
 #ifdef Q_OS_MACOS
-  const bool rotateMod = mods & Qt::ControlModifier;  // Cmd
-  const bool scaleMod = mods & Qt::AltModifier;       // Shift
+  const bool rotateMod = (mods & Qt::ControlModifier) != 0;  // Cmd
+  const bool scaleMod = (mods & Qt::AltModifier) != 0;       // Shift
 #else
-  const bool rotateMod = mods & Qt::ControlModifier;  // Ctrl
-  const bool scaleMod = mods & Qt::MetaModifier;      // Shift
+  const bool rotateMod = (mods & Qt::ControlModifier) != 0;  // Ctrl
+  const bool scaleMod = (mods & Qt::MetaModifier) != 0;      // Shift
 #endif
 
   // Transform selected items with modifiers (scale first to avoid conflict on
@@ -79,7 +80,7 @@ void EditorView::wheelEvent(QWheelEvent* event) {
       }
     }
     // Exclude substrate from scaling
-    for (int i = targets.size() - 1; i >= 0; --i) {
+    for (int i = static_cast<int>(targets.size()) - 1; i >= 0; --i) {
       if (dynamic_cast<SubstrateItem*>(targets[i]) != nullptr) {
         targets.removeAt(i);
       }
@@ -88,10 +89,10 @@ void EditorView::wheelEvent(QWheelEvent* event) {
       event->accept();
       return;
     }
-    for (QGraphicsItem* it : targets) {
-      it->setTransformOriginPoint(it->boundingRect().center());
-      const qreal newScale = std::clamp(it->scale() * step, 0.1, 10.0);
-      it->setScale(newScale);
+    for (QGraphicsItem* item : targets) {
+      item->setTransformOriginPoint(item->boundingRect().center());
+      const qreal newScale = std::clamp(item->scale() * step, 0.1, 10.0);
+      item->setScale(newScale);
     }
     event->accept();
     return;
@@ -107,7 +108,7 @@ void EditorView::wheelEvent(QWheelEvent* event) {
       }
     }
     // Exclude substrate from rotation
-    for (int i = targets.size() - 1; i >= 0; --i) {
+    for (int i = static_cast<int>(targets.size()) - 1; i >= 0; --i) {
       if (dynamic_cast<SubstrateItem*>(targets[i]) != nullptr) {
         targets.removeAt(i);
       }
@@ -116,15 +117,15 @@ void EditorView::wheelEvent(QWheelEvent* event) {
       event->accept();
       return;
     }
-    for (QGraphicsItem* it : targets) {
-      it->setRotation(it->rotation() + delta);
+    for (QGraphicsItem* item : targets) {
+      item->setRotation(item->rotation() + delta);
     }
     event->accept();
     return;
   }
 
-  qreal factor = (num_steps > 0) ? std::pow(kZoomStep, num_steps)
-                                 : std::pow(1.0 / kZoomStep, -num_steps);
+  const qreal factor = (num_steps > 0) ? std::pow(kZoomStep, num_steps)
+                                       : std::pow(1.0 / kZoomStep, -num_steps);
   applyZoom(factor);
 }
 

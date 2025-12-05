@@ -29,10 +29,10 @@ class ModelObject {
   }
 
  protected:
-  void notify_change(ModelChange change) const;
+  void notify_change(const ModelChange& change) const;
 
  private:
-  static std::string generate_id();
+  static auto GenerateId() -> std::string;
 
   std::string id_;
   std::string name_{"Unnamed"};

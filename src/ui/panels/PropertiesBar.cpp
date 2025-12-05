@@ -24,25 +24,30 @@ Q_DECLARE_METATYPE(MaterialModel*)
 namespace {
 constexpr int kMinPropertiesBarWidthPx = 220;
 constexpr int kDefaultPropertiesBarWidthPx = 280;
+constexpr int kPropertiesBarMarginPx = 8;
+constexpr int kPropertiesBarSpacingPx = 4;
 }  // namespace
 
-PropertiesBar::PropertiesBar(QWidget* parent) : QWidget(parent) {
+// NOLINTNEXTLINE(readability-function-cognitive-complexity)
+PropertiesBar::PropertiesBar(QWidget* parent)
+    : QWidget(parent),
+      layout_(new QVBoxLayout(this)),
+      type_label_(new QLabel("", this)),
+      name_edit_(new QLineEdit(this)),
+      preferred_width_(kDefaultPropertiesBarWidthPx) {
   qRegisterMetaType<MaterialModel*>("MaterialModel*");
-  layout_ = new QVBoxLayout(this);
-  layout_->setContentsMargins(8, 8, 8, 8);
-  layout_->setSpacing(4);
+  layout_->setContentsMargins(kPropertiesBarMarginPx, kPropertiesBarMarginPx,
+                              kPropertiesBarMarginPx, kPropertiesBarMarginPx);
+  layout_->setSpacing(kPropertiesBarSpacingPx);
 
-  type_label_ = new QLabel("", this);
-  QFont f = type_label_->font();
-  f.setBold(true);
-  type_label_->setFont(f);
+  QFont font = type_label_->font();
+  font.setBold(true);
+  type_label_->setFont(font);
   layout_->addWidget(type_label_);
 
   setup_type_selector();
   setup_material_selector();  // Initialize material controls early
   setup_grid_controls();      // Initialize grid controls
-
-  name_edit_ = new QLineEdit(this);
   name_edit_->setPlaceholderText("Object name");
   // Use editingFinished instead of textChanged to allow temporary empty state
   // during editing
@@ -50,9 +55,9 @@ PropertiesBar::PropertiesBar(QWidget* parent) : QWidget(parent) {
     if (updating_) {
       return;
     }
-    QString trimmed = name_edit_->text().trimmed();
+    const QString trimmed = name_edit_->text().trimmed();
 
-    if (current_material_) {
+    if (current_material_ != nullptr) {
       // Handle material name change
       if (trimmed.isEmpty()) {
         // Restore previous name
@@ -67,26 +72,26 @@ PropertiesBar::PropertiesBar(QWidget* parent) : QWidget(parent) {
       return;
     }
 
-    if (!current_item_ && !current_model_) {
+    if (current_item_ == nullptr && current_model_ == nullptr) {
       return;
     }
     if (trimmed.isEmpty()) {
       // Restore previous name
       updating_ = true;
-      if (current_model_) {
+      if (current_model_ != nullptr) {
         name_edit_->setText(QString::fromStdString(current_model_->name()));
-      } else if (current_item_) {
+      } else if (current_item_ != nullptr) {
         name_edit_->setText(current_item_->name());
       }
       updating_ = false;
       return;
     }
-    if (current_model_) {
+    if (current_model_ != nullptr) {
       current_model_->set_name(trimmed.toStdString());
-    } else if (current_item_) {
+    } else if (current_item_ != nullptr) {
       // Validate item is still valid before accessing
       if (auto* graphicsItem = dynamic_cast<QGraphicsItem*>(current_item_)) {
-        if (!graphicsItem->scene()) {
+        if (graphicsItem->scene() == nullptr) {
           LOG_WARN()
             << "PropertiesBar: name_changed callback - item no longer in scene";
           current_item_ = nullptr;
@@ -103,20 +108,20 @@ PropertiesBar::PropertiesBar(QWidget* parent) : QWidget(parent) {
 
   setMinimumWidth(kMinPropertiesBarWidthPx);
   setFixedWidth(kDefaultPropertiesBarWidthPx);
-  preferred_width_ = kDefaultPropertiesBarWidthPx;
 }
 
 PropertiesBar::~PropertiesBar() {
   // Clear current item reference before destroying widgets
   current_item_ = nullptr;
 
-  if (content_widget_) {
+  if (content_widget_ != nullptr) {
     layout_->removeWidget(content_widget_);
     content_widget_->deleteLater();
     content_widget_ = nullptr;
   }
 }
 
+// NOLINTNEXTLINE(readability-function-cognitive-complexity)
 void PropertiesBar::set_selected_item(ISceneObject* item, const QString& name) {
   LOG_DEBUG() << "PropertiesBar::set_selected_item called with item=" << item
               << " name=" << name.toStdString();
@@ -125,10 +130,10 @@ void PropertiesBar::set_selected_item(ISceneObject* item, const QString& name) {
   current_item_ = item;
   current_material_ = nullptr;
   current_material_shared_.reset();
-  if (shape_binder_ && current_item_ &&
+  if (shape_binder_ != nullptr && current_item_ != nullptr &&
       current_item_->type_name() != "substrate") {
     current_model_ = shape_binder_->bind_shape(current_item_);
-    if (current_model_) {
+    if (current_model_ != nullptr) {
       if (auto material = current_model_->material()) {
         item_material_ = material.get();
       } else {
@@ -142,12 +147,12 @@ void PropertiesBar::set_selected_item(ISceneObject* item, const QString& name) {
   updating_ = true;
 
   // Remove old content
-  if (content_widget_) {
+  if (content_widget_ != nullptr) {
     layout_->removeWidget(content_widget_);
     content_widget_->deleteLater();
     content_widget_ = nullptr;
   }
-  if (!current_item_) {
+  if (current_item_ == nullptr) {
     LOG_DEBUG() << "PropertiesBar::set_selected_item: item is null, clearing";
     clear();
     updating_ = false;
@@ -157,7 +162,7 @@ void PropertiesBar::set_selected_item(ISceneObject* item, const QString& name) {
   // Validate that item is still valid (check if it's a QGraphicsItem that's
   // still in scene)
   if (auto* graphicsItem = dynamic_cast<QGraphicsItem*>(current_item_)) {
-    if (!graphicsItem->scene()) {
+    if (graphicsItem->scene() == nullptr) {
       LOG_WARN() << "PropertiesBar::set_selected_item: item is not in scene, "
                     "clearing. Item ptr="
                  << current_item_;
@@ -190,8 +195,8 @@ void PropertiesBar::set_selected_item(ISceneObject* item, const QString& name) {
   // Update type selector
   if (is_inclusion_item()) {
     type_combo_->setVisible(true);
-    QString currentType = current_item_->type_name();
-    int index = type_combo_->findData(currentType);
+    const QString currentType = current_item_->type_name();
+    const int index = type_combo_->findData(currentType);
     if (index >= 0) {
       updating_ = true;
       type_combo_->setCurrentIndex(index);
@@ -211,13 +216,13 @@ void PropertiesBar::set_selected_item(ISceneObject* item, const QString& name) {
   content_widget_ = current_item_->create_properties_widget(this);
   int insertIndex =
     3;  // After name_edit (type_label=0, type_combo=1, name_edit=2)
-  if (content_widget_) {
+  if (content_widget_ != nullptr) {
     layout_->insertWidget(insertIndex, content_widget_);
     insertIndex++;  // Material controls will go after content_widget
     // Disable color editing in content widget if material preset is selected
-    if (item_material_ && content_widget_) {
+    if (item_material_ != nullptr && content_widget_ != nullptr) {
       // Find and disable color button in content widget
-      QList<QPushButton*> buttons =
+      const QList<QPushButton*> buttons =
         content_widget_->findChildren<QPushButton*>();
       for (auto* btn : buttons) {
         if (btn->text().contains("Color", Qt::CaseInsensitive)) {
@@ -284,18 +289,18 @@ void PropertiesBar::set_selected_item(ISceneObject* item, const QString& name) {
 }
 
 void PropertiesBar::update_name(const QString& name) {
-  if (current_material_) {
+  if (current_material_ != nullptr) {
     updating_ = true;
     name_edit_->setText(name);
     updating_ = false;
     return;
   }
-  if (!current_item_) {
+  if (current_item_ == nullptr) {
     return;
   }
   // Validate item is still valid
   if (auto* graphicsItem = dynamic_cast<QGraphicsItem*>(current_item_)) {
-    if (!graphicsItem->scene()) {
+    if (graphicsItem->scene() == nullptr) {
       LOG_WARN() << "PropertiesBar::update_name: item no longer in scene";
       current_item_ = nullptr;
       return;
@@ -328,7 +333,7 @@ void PropertiesBar::connect_model_signals() {
                     << static_cast<int>(change.type);
         if (change.type == ModelChange::Type::NameChanged &&
             current_material_shared_) {
-          QString name =
+          const QString name =
             QString::fromStdString(current_material_shared_->name());
           LOG_DEBUG() << "PropertiesBar: Material name changed to="
                       << name.toStdString();
@@ -346,12 +351,12 @@ void PropertiesBar::connect_model_signals() {
   }
 
   // Connect to shape model signals if shape is selected
-  if (current_model_) {
+  if (current_model_ != nullptr) {
     LOG_DEBUG() << "PropertiesBar: Connecting to shape model signals";
     shape_model_connection_id_ =
       current_model_->on_changed().connect([this](const ModelChange& change) {
         if (change.type == ModelChange::Type::NameChanged && current_model_) {
-          QString name = QString::fromStdString(current_model_->name());
+          const QString name = QString::fromStdString(current_model_->name());
           if (!updating_) {
             update_name(name);
           }
@@ -377,7 +382,7 @@ void PropertiesBar::clear() {
   grid_type_combo_->setVisible(false);
   grid_frequency_x_spin_->setVisible(false);
   grid_frequency_y_spin_->setVisible(false);
-  if (content_widget_) {
+  if (content_widget_ != nullptr) {
     layout_->removeWidget(content_widget_);
     content_widget_->deleteLater();
     content_widget_ = nullptr;
@@ -395,11 +400,11 @@ void PropertiesBar::setup_type_selector() {
 
   connect(type_combo_, QOverload<int>::of(&QComboBox::currentIndexChanged),
           this, [this](int index) {
-            if (updating_ || !current_item_ || !is_inclusion_item()) {
+            if (updating_ || current_item_ == nullptr || !is_inclusion_item()) {
               return;
             }
-            QString newType = type_combo_->itemData(index).toString();
-            QString currentType = current_item_->type_name();
+            const QString newType = type_combo_->itemData(index).toString();
+            const QString currentType = current_item_->type_name();
             if (newType != currentType) {
               emit type_changed(current_item_, newType);
             }
@@ -408,6 +413,7 @@ void PropertiesBar::setup_type_selector() {
   layout_->addWidget(type_combo_);
 }
 
+// NOLINTNEXTLINE(readability-function-cognitive-complexity)
 void PropertiesBar::setup_material_selector() {
   material_combo_ = new QComboBox(this);
   material_combo_->addItem("Custom",
@@ -417,7 +423,7 @@ void PropertiesBar::setup_material_selector() {
   connect(
     material_combo_, QOverload<int>::of(&QComboBox::currentIndexChanged), this,
     [this](int index) {
-      if (updating_ || !current_item_ || !model_) {
+      if (updating_ || current_item_ == nullptr || model_ == nullptr) {
         return;
       }
       MaterialModel* material =
@@ -425,8 +431,8 @@ void PropertiesBar::setup_material_selector() {
       item_material_ = material;
 
       // Apply to current shape model
-      if (current_model_) {
-        if (material) {
+      if (current_model_ != nullptr) {
+        if (material != nullptr) {
           auto shared = find_material(material);
           if (shared) {
             current_model_->assign_material(shared);
@@ -450,7 +456,7 @@ void PropertiesBar::setup_material_selector() {
           }
         }
         // Update material model for scene item
-        if (current_model_->material() && current_item_) {
+        if (current_model_->material() != nullptr && current_item_ != nullptr) {
           current_item_->set_material_model(current_model_->material().get());
         }
       }
@@ -466,14 +472,15 @@ void PropertiesBar::setup_material_selector() {
   material_color_btn_ = new QPushButton("Material Color", this);
   material_color_btn_->setVisible(false);
   connect(material_color_btn_, &QPushButton::clicked, this, [this] {
-    if (updating_)
+    if (updating_) {
       return;
+    }
     QColor currentColor;
-    if (current_material_) {
+    if (current_material_ != nullptr) {
       currentColor = to_qcolor(current_material_->color());
-    } else if (current_item_ && item_material_) {
+    } else if (current_item_ != nullptr && item_material_ != nullptr) {
       currentColor = to_qcolor(item_material_->color());
-    } else if (current_item_) {
+    } else if (current_item_ != nullptr) {
       // Get color from item
       if (auto* graphicsItem = dynamic_cast<QGraphicsItem*>(current_item_)) {
         if (auto* rectItem = dynamic_cast<QGraphicsRectItem*>(graphicsItem)) {
@@ -488,17 +495,18 @@ void PropertiesBar::setup_material_selector() {
       }
     }
 
-    QColor newColor = QColorDialog::getColor(currentColor, material_color_btn_,
-                                             "Choose Material Color",
+    const QColor newColor = QColorDialog::getColor(currentColor, material_color_btn_,
+                                                    "Choose Material Color",
                                              QColorDialog::ShowAlphaChannel);
     if (newColor.isValid()) {
-      if (current_material_) {
+      if (current_material_ != nullptr) {
         current_material_->set_color(to_model_color(newColor));
         emit material_color_changed(current_material_, newColor);
-      } else if (current_item_ && item_material_) {
+      } else if (current_item_ != nullptr && item_material_ != nullptr) {
         item_material_->set_color(to_model_color(newColor));
         emit material_color_changed(item_material_, newColor);
-      } else if (current_model_ && current_model_->material()) {
+      } else if (current_model_ != nullptr &&
+                 current_model_->material() != nullptr) {
         current_model_->material()->set_color(to_model_color(newColor));
       }
       update_material_color_button();
@@ -509,6 +517,7 @@ void PropertiesBar::setup_material_selector() {
   // Don't add them here to avoid wrong order
 }
 
+// NOLINTNEXTLINE(readability-function-cognitive-complexity)
 void PropertiesBar::setup_grid_controls() {
   grid_type_label_ = new QLabel("Grid Type:", this);
   grid_type_label_->setVisible(false);
@@ -522,11 +531,12 @@ void PropertiesBar::setup_grid_controls() {
 
   connect(
     grid_type_combo_, QOverload<int>::of(&QComboBox::currentIndexChanged), this,
+    // NOLINTNEXTLINE(readability-function-cognitive-complexity)
     [this](int index) {
-      if (updating_ || !current_material_shared_) {
+      if (updating_ || current_material_shared_ == nullptr) {
         return;
       }
-      MaterialModel::GridType gridType = static_cast<MaterialModel::GridType>(
+      const MaterialModel::GridType gridType = static_cast<MaterialModel::GridType>(
         grid_type_combo_->itemData(index).toInt());
       current_material_shared_->set_grid_type(gridType);
       // Show/hide frequency controls based on grid type
@@ -534,14 +544,14 @@ void PropertiesBar::setup_grid_controls() {
       grid_frequency_x_spin_->setVisible(showGrid);
       grid_frequency_y_spin_->setVisible(showGrid);
       // Update current item if custom material
-      if (current_item_ && current_model_ &&
+      if (current_item_ != nullptr && current_model_ != nullptr &&
           current_model_->material_mode() == ShapeModel::MaterialMode::Custom) {
         current_item_->set_material_model(current_material_shared_.get());
       }
       // Update all shapes using this material (for preset materials)
-      if (shape_binder_ && model_) {
+      if (shape_binder_ != nullptr && model_ != nullptr) {
         auto* doc = model_->document();
-        if (doc) {
+        if (doc != nullptr) {
           for (const auto& shape : doc->shapes()) {
             if (shape->material() == current_material_shared_) {
               if (auto* item = shape_binder_->item_for(shape)) {
@@ -567,23 +577,25 @@ void PropertiesBar::setup_grid_controls() {
   grid_frequency_y_spin_->setSingleStep(1.0);
   grid_frequency_y_spin_->setVisible(false);
 
+  // NOLINTNEXTLINE(readability-function-cognitive-complexity)
   auto updateGrid = [this]() {
-    if (updating_ || !current_material_shared_) {
+    if (updating_ || current_material_shared_ == nullptr) {
       return;
     }
     // Update current item if custom material
-    if (current_item_ && current_model_ &&
+    if (current_item_ != nullptr && current_model_ != nullptr &&
         current_model_->material_mode() == ShapeModel::MaterialMode::Custom) {
       current_item_->set_material_model(current_material_shared_.get());
     }
     // Update all shapes using this material (for preset materials)
-    if (shape_binder_ && model_) {
+    if (shape_binder_ != nullptr && model_ != nullptr) {
       auto* doc = model_->document();
-      if (doc) {
+      if (doc != nullptr) {
         for (const auto& shape : doc->shapes()) {
           if (shape->material() == current_material_shared_) {
             if (auto* item = shape_binder_->item_for(shape)) {
-              if (auto* graphicsItem = dynamic_cast<QGraphicsItem*>(item)) {
+              // item_for returns QGraphicsItem*, no need for dynamic_cast
+              if (auto* graphicsItem = item) {
                 graphicsItem->update();
               }
             }
@@ -596,7 +608,7 @@ void PropertiesBar::setup_grid_controls() {
   connect(grid_frequency_x_spin_,
           QOverload<double>::of(&QDoubleSpinBox::valueChanged), this,
           [this, updateGrid](double value) {
-            if (updating_ || !current_material_shared_) {
+            if (updating_ || current_material_shared_ == nullptr) {
               return;
             }
             current_material_shared_->set_grid_frequency_x(value);
@@ -606,7 +618,7 @@ void PropertiesBar::setup_grid_controls() {
   connect(grid_frequency_y_spin_,
           QOverload<double>::of(&QDoubleSpinBox::valueChanged), this,
           [this, updateGrid](double value) {
-            if (updating_ || !current_material_shared_) {
+            if (updating_ || current_material_shared_ == nullptr) {
               return;
             }
             current_material_shared_->set_grid_frequency_y(value);
@@ -615,13 +627,13 @@ void PropertiesBar::setup_grid_controls() {
 }
 
 void PropertiesBar::update_grid_controls() {
-  if (!current_material_shared_) {
+  if (current_material_shared_ == nullptr) {
     return;
   }
   updating_ = true;
 
   // Set grid type
-  MaterialModel::GridType gridType = current_material_shared_->grid_type();
+  const MaterialModel::GridType gridType = current_material_shared_->grid_type();
   for (int i = 0; i < grid_type_combo_->count(); ++i) {
     if (grid_type_combo_->itemData(i).toInt() == static_cast<int>(gridType)) {
       grid_type_combo_->setCurrentIndex(i);
@@ -642,8 +654,8 @@ void PropertiesBar::update_grid_controls() {
   grid_frequency_y_spin_->setVisible(showGrid);
 
   // Update labels based on shape type
-  if (current_item_ && showGrid) {
-    QString typeName = current_item_->type_name();
+  if (current_item_ != nullptr && showGrid) {
+    const QString typeName = current_item_->type_name();
     if (typeName == "rectangle") {
       grid_frequency_x_spin_->setSuffix(" horizontal");
       grid_frequency_y_spin_->setSuffix(" vertical");
@@ -673,9 +685,9 @@ void PropertiesBar::set_selected_material(MaterialModel* material) {
 
   // Find and store shared_ptr to material
   current_material_shared_.reset();
-  if (material && model_) {
+  if (material != nullptr && model_ != nullptr) {
     current_material_shared_ = find_material(material);
-    if (!current_material_shared_) {
+    if (current_material_shared_ == nullptr) {
       LOG_WARN() << "PropertiesBar: Could not find shared_ptr for material="
                  << material;
     } else {
@@ -687,13 +699,13 @@ void PropertiesBar::set_selected_material(MaterialModel* material) {
   updating_ = true;
 
   // Remove old content
-  if (content_widget_) {
+  if (content_widget_ != nullptr) {
     layout_->removeWidget(content_widget_);
     content_widget_->deleteLater();
     content_widget_ = nullptr;
   }
 
-  if (!current_material_) {
+  if (current_material_ == nullptr) {
     clear();
     updating_ = false;
     return;
@@ -745,7 +757,7 @@ void PropertiesBar::set_selected_material(MaterialModel* material) {
 }
 
 void PropertiesBar::update_material_ui() {
-  if (!model_ || !current_item_) {
+  if (model_ == nullptr || current_item_ == nullptr) {
     return;
   }
 
@@ -763,7 +775,7 @@ void PropertiesBar::update_material_ui() {
   }
 
   // Set current selection
-  if (item_material_) {
+  if (item_material_ != nullptr) {
     for (int i = 0; i < material_combo_->count(); ++i) {
       if (material_combo_->itemData(i).value<MaterialModel*>() ==
           item_material_) {
@@ -783,11 +795,11 @@ void PropertiesBar::update_material_ui() {
 
 void PropertiesBar::update_material_color_button() {
   QColor color;
-  if (current_material_) {
+  if (current_material_ != nullptr) {
     color = to_qcolor(current_material_->color());
-  } else if (item_material_) {
+  } else if (item_material_ != nullptr) {
     color = to_qcolor(item_material_->color());
-  } else if (current_item_) {
+  } else if (current_item_ != nullptr) {
     // Get color from item
     if (auto* graphicsItem = dynamic_cast<QGraphicsItem*>(current_item_)) {
       if (auto* rectItem = dynamic_cast<QGraphicsRectItem*>(graphicsItem)) {
@@ -801,26 +813,26 @@ void PropertiesBar::update_material_color_button() {
       }
     }
   }
-  QString style = QString("background-color: %1;").arg(color.name());
+  const QString style = QString("background-color: %1;").arg(color.name());
   material_color_btn_->setStyleSheet(style);
   material_color_btn_->setEnabled(can_edit_material_color());
 }
 
 bool PropertiesBar::is_inclusion_item() const {
-  if (!current_item_) {
+  if (current_item_ == nullptr) {
     return false;
   }
-  QString type = current_item_->type_name();
+  const QString type = current_item_->type_name();
   return type != "substrate";
 }
 
 std::shared_ptr<MaterialModel> PropertiesBar::find_material(
   MaterialModel* raw) const {
-  if (!raw || !model_) {
+  if (raw == nullptr || model_ == nullptr) {
     return nullptr;
   }
   auto* doc = model_->document();
-  if (!doc) {
+  if (doc == nullptr) {
     return nullptr;
   }
   for (const auto& material : doc->materials()) {
@@ -832,10 +844,10 @@ std::shared_ptr<MaterialModel> PropertiesBar::find_material(
 }
 
 bool PropertiesBar::can_edit_material_color() const {
-  if (current_material_) {
+  if (current_material_ != nullptr) {
     return true;
   }
-  if (!current_item_) {
+  if (current_item_ == nullptr) {
     return false;
   }
   // Allow editing if custom material is selected (item_material_ is nullptr but

@@ -26,15 +26,16 @@ ActivityBar::~ActivityBar() = default;
 ActivityButton* ActivityBar::addToggleButton(const QIcon& icon,
                                              const QString& text,
                                              bool checked) {
+  // Qt uses parent-based ownership, not smart pointers
   auto* btn = new ActivityButton(this);
   btn->setToolTip(text);
   btn->configure(icon, QSize(kDefaultIconSizePx, kDefaultIconSizePx), true,
                  checked);
   layout_->addWidget(btn, 0, Qt::AlignTop);
 
-  const int w = btn->sizeHint().width() + 2 * margin_;
-  if (w > fixed_width_) {
-    fixed_width_ = w;
+  const int button_width = btn->sizeHint().width() + 2 * margin_;
+  if (button_width > fixed_width_) {
+    fixed_width_ = button_width;
     setFixedWidth(fixed_width_);
   }
   return btn;

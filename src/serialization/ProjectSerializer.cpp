@@ -34,12 +34,15 @@ QString to_string(ShapeModel::ShapeType type) {
 }
 
 ShapeModel::ShapeType shape_type_from_string(const QString& value) {
-  if (value == QLatin1String("ellipse"))
+  if (value == QLatin1String("ellipse")) {
     return ShapeModel::ShapeType::Ellipse;
-  if (value == QLatin1String("circle"))
+  }
+  if (value == QLatin1String("circle")) {
     return ShapeModel::ShapeType::Circle;
-  if (value == QLatin1String("stick"))
+  }
+  if (value == QLatin1String("stick")) {
     return ShapeModel::ShapeType::Stick;
+  }
   return ShapeModel::ShapeType::Rectangle;
 }
 
@@ -101,17 +104,19 @@ Size2D size_from_value(const QJsonObject& object, ShapeModel::ShapeType type) {
     return Size2D{object["width"].toDouble(), object["height"].toDouble()};
   }
   if (type == ShapeModel::ShapeType::Circle && object.contains("radius")) {
-    double radius = object["radius"].toDouble();
-    double diameter = radius * 2.0;
+    constexpr double kRadiusToDiameterMultiplier = 2.0;
+    const double radius = object["radius"].toDouble();
+    const double diameter = radius * kRadiusToDiameterMultiplier;
     return Size2D{diameter, diameter};
   }
   if (type == ShapeModel::ShapeType::Stick && object.contains("line")) {
+    constexpr double kDefaultPenWidth = 2.0;
     QJsonObject line = object["line"].toObject();
-    double dx = line["x2"].toDouble() - line["x1"].toDouble();
-    double dy = line["y2"].toDouble() - line["y1"].toDouble();
-    double length = std::sqrt(dx * dx + dy * dy);
-    double width =
-      object.contains("pen_width") ? object["pen_width"].toDouble() : 2.0;
+    const double delta_x = line["x2"].toDouble() - line["x1"].toDouble();
+    const double delta_y = line["y2"].toDouble() - line["y1"].toDouble();
+    const double length = std::sqrt(delta_x * delta_x + delta_y * delta_y);
+    const double width = object.contains("pen_width") ? object["pen_width"].toDouble()
+                                                      : kDefaultPenWidth;
     return Size2D{length, width};
   }
   return Size2D{100.0, 100.0};
@@ -133,7 +138,7 @@ bool ProjectSerializer::save_to_file(const QString& filename,
                                      DocumentModel* document) {
   LOG_INFO() << "Saving project to: " << filename.toStdString();
 
-  if (!document) {
+  if (document == nullptr) {
     LOG_ERROR() << "Save failed: document is null";
     return false;
   }
@@ -200,7 +205,7 @@ bool ProjectSerializer::save_to_file(const QString& filename,
   }
   root["objects"] = shapes;
 
-  QJsonDocument doc(root);
+  const QJsonDocument doc(root);
   QFile file(filename);
   if (!file.open(QIODevice::WriteOnly)) {
     LOG_ERROR() << "Failed to open file for writing: "
@@ -213,11 +218,12 @@ bool ProjectSerializer::save_to_file(const QString& filename,
   return true;
 }
 
+// NOLINTNEXTLINE(readability-function-cognitive-complexity)
 bool ProjectSerializer::load_from_file(const QString& filename,
                                        DocumentModel* document) {
   LOG_INFO() << "Loading project from: " << filename.toStdString();
 
-  if (!document) {
+  if (document == nullptr) {
     LOG_ERROR() << "Load failed: document is null";
     return false;
   }
@@ -231,7 +237,7 @@ bool ProjectSerializer::load_from_file(const QString& filename,
   const QByteArray data = file.readAll();
   file.close();
 
-  QJsonDocument doc = QJsonDocument::fromJson(data);
+  const QJsonDocument doc = QJsonDocument::fromJson(data);
   if (doc.isNull() || !doc.isObject()) {
     LOG_ERROR() << "Invalid project file format";
     return false;
@@ -268,20 +274,20 @@ bool ProjectSerializer::load_from_file(const QString& filename,
 
   std::unordered_map<std::string, std::shared_ptr<MaterialModel>>
     materials_by_name;
-  QJsonArray materials = root.contains("materials")
-                           ? root["materials"].toArray()
-                           : root["material_presets"].toArray();
+  const QJsonArray materials = root.contains("materials")
+                                  ? root["materials"].toArray()
+                                  : root["material_presets"].toArray();
   for (const QJsonValue& value : materials) {
     QJsonObject materialObj = value.toObject();
-    QString name = materialObj["name"].toString(QStringLiteral("Material"));
-    Color color = materialObj.contains("color")
-                    ? color_from_json(materialObj["color"].toArray())
-                    : color_from_json(materialObj["fill_color"].toArray());
+    const QString name = materialObj["name"].toString(QStringLiteral("Material"));
+    const Color color = materialObj.contains("color")
+                          ? color_from_json(materialObj["color"].toArray())
+                          : color_from_json(materialObj["fill_color"].toArray());
     auto material = document->create_material(color, name.toStdString());
 
     // Load grid settings
     if (materialObj.contains("grid_type")) {
-      int gridTypeValue = materialObj["grid_type"].toInt();
+      const int gridTypeValue = materialObj["grid_type"].toInt();
       // Handle backward compatibility: old Radial (1) becomes Internal (1)
       MaterialModel::GridType gridType =
         static_cast<MaterialModel::GridType>(gridTypeValue);
@@ -301,7 +307,7 @@ bool ProjectSerializer::load_from_file(const QString& filename,
         materialObj["grid_frequency_y"].toDouble());
     } else if (materialObj.contains("grid_frequency")) {
       // Backward compatibility: use old single value for both x and y
-      double freq = materialObj["grid_frequency"].toDouble();
+      const double freq = materialObj["grid_frequency"].toDouble();
       material->set_grid_frequency_x(freq);
       material->set_grid_frequency_y(freq);
     }
@@ -310,11 +316,11 @@ bool ProjectSerializer::load_from_file(const QString& filename,
   }
 
   if (root.contains("objects")) {
-    QJsonArray shapes = root["objects"].toArray();
+    const QJsonArray shapes = root["objects"].toArray();
     for (const QJsonValue& value : shapes) {
       QJsonObject obj = value.toObject();
-      QString name = obj["name"].toString(QStringLiteral("Shape"));
-      ShapeModel::ShapeType type = shape_type_from_string(
+      const QString name = obj["name"].toString(QStringLiteral("Shape"));
+      const ShapeModel::ShapeType type = shape_type_from_string(
         obj["type"].toString(QStringLiteral("rectangle")));
       auto shape = document->create_shape(type, name.toStdString());
 
@@ -325,13 +331,13 @@ bool ProjectSerializer::load_from_file(const QString& filename,
       if (obj.contains("rotation")) {
         shape->set_rotation_deg(obj["rotation"].toDouble());
       }
-      QString mode = obj["material_mode"].toString(QStringLiteral("custom"));
+      const QString mode = obj["material_mode"].toString(QStringLiteral("custom"));
       if (mode == QLatin1String("preset") && obj.contains("material_name")) {
         const std::string matName =
           obj["material_name"].toString().toStdString();
-        auto it = materials_by_name.find(matName);
-        if (it != materials_by_name.end()) {
-          shape->assign_material(it->second);
+        auto material_iterator = materials_by_name.find(matName);
+        if (material_iterator != materials_by_name.end()) {
+          shape->assign_material(material_iterator->second);
         } else {
           shape->clear_material();
         }
@@ -343,7 +349,7 @@ bool ProjectSerializer::load_from_file(const QString& filename,
         }
         // Load grid settings
         if (obj.contains("grid_type")) {
-          int gridTypeValue = obj["grid_type"].toInt();
+          const int gridTypeValue = obj["grid_type"].toInt();
           // Handle backward compatibility: old Radial (1) becomes Internal (1)
           // None = 0, Internal = 1 (Radial was also 1, so it maps correctly)
           MaterialModel::GridType gridType =
@@ -364,7 +370,7 @@ bool ProjectSerializer::load_from_file(const QString& filename,
             obj["grid_frequency_y"].toDouble());
         } else if (obj.contains("grid_frequency")) {
           // Backward compatibility: use old single value for both x and y
-          double freq = obj["grid_frequency"].toDouble();
+          const double freq = obj["grid_frequency"].toDouble();
           shape->material()->set_grid_frequency_x(freq);
           shape->material()->set_grid_frequency_y(freq);
         }

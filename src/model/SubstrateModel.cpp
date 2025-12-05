@@ -1,5 +1,7 @@
 #include "model/SubstrateModel.h"
 
+#include "model/core/ModelTypes.h"
+
 SubstrateModel::SubstrateModel(const Size2D& size, const Color& color)
     : size_(size), color_(color) {}
 

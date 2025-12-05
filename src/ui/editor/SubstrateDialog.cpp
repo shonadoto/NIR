@@ -13,17 +13,17 @@ constexpr double kStepPx = 10.0;
 
 SubstrateDialog::SubstrateDialog(QWidget* parent, double width_px,
                                  double height_px)
-    : QDialog(parent) {
+    : QDialog(parent),
+      w_spin_(new QDoubleSpinBox(this)),
+      h_spin_(new QDoubleSpinBox(this)) {
   setWindowTitle("Substrate Size");
 
   auto* form = new QFormLayout();
-  w_spin_ = new QDoubleSpinBox(this);
   w_spin_->setRange(kMinSizePx, kMaxSizePx);
   w_spin_->setSingleStep(kStepPx);
   w_spin_->setDecimals(1);
   w_spin_->setValue(width_px);
 
-  h_spin_ = new QDoubleSpinBox(this);
   h_spin_->setRange(kMinSizePx, kMaxSizePx);
   h_spin_->setSingleStep(kStepPx);
   h_spin_->setDecimals(1);
@@ -42,9 +42,9 @@ SubstrateDialog::SubstrateDialog(QWidget* parent, double width_px,
   layout->addWidget(buttons);
 }
 
-double SubstrateDialog::width_px() const {
+auto SubstrateDialog::width_px() const -> double {
   return w_spin_->value();
 }
-double SubstrateDialog::height_px() const {
+auto SubstrateDialog::height_px() const -> double {
   return h_spin_->value();
 }
