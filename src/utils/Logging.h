@@ -4,6 +4,7 @@
 
 #include <sstream>
 #include <string>
+#include <string_view>
 
 // Helper class for stream-based logging
 class LogStream {
@@ -11,8 +12,32 @@ class LogStream {
   LogStream(spdlog::level::level_enum level) : level_(level) {}
 
   ~LogStream() {
-    if (!message_.str().empty()) {
-      spdlog::log(level_, "{}", message_.str());
+    std::string msg = message_.str();
+    if (!msg.empty()) {
+      const char* msg_cstr = msg.c_str();
+      switch (level_) {
+        case spdlog::level::trace:
+          spdlog::trace("{}", msg_cstr);
+          break;
+        case spdlog::level::debug:
+          spdlog::debug("{}", msg_cstr);
+          break;
+        case spdlog::level::info:
+          spdlog::info("{}", msg_cstr);
+          break;
+        case spdlog::level::warn:
+          spdlog::warn("{}", msg_cstr);
+          break;
+        case spdlog::level::err:
+          spdlog::error("{}", msg_cstr);
+          break;
+        case spdlog::level::critical:
+          spdlog::critical("{}", msg_cstr);
+          break;
+        default:
+          spdlog::log(level_, "{}", msg_cstr);
+          break;
+      }
     }
   }
 

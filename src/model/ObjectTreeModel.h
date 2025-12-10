@@ -25,7 +25,7 @@ struct TreeNode {
 
 class ObjectTreeModel : public QAbstractItemModel {
   Q_OBJECT
-public:
+ public:
   explicit ObjectTreeModel(QObject* parent = nullptr);
   ~ObjectTreeModel() override;
 
@@ -66,7 +66,7 @@ public:
     return document_;
   }
 
-private:
+ private:
   // Helper methods
   TreeNode* node_from_index(const QModelIndex& index) const;
   QModelIndex create_index_for_node(TreeNode* node, int row, int column) const;

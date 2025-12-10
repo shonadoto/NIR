@@ -113,7 +113,8 @@ auto SetupLogging() -> void {
   logger->set_pattern("[%Y-%m-%d %H:%M:%S.%e] [%^%l%$] [%s:%#] %v");
 
   spdlog::set_default_logger(logger);
-  LOG_INFO_FMT("Logging initialized. Log file: {}", log_path.toStdString());
+  const std::string log_path_str = log_path.toStdString();
+  LOG_INFO_FMT("Logging initialized. Log file: {}", log_path_str.c_str());
 }
 
 auto main(int argc, char* argv[]) -> int {

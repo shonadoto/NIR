@@ -115,8 +115,9 @@ Size2D size_from_value(const QJsonObject& object, ShapeModel::ShapeType type) {
     const double delta_x = line["x2"].toDouble() - line["x1"].toDouble();
     const double delta_y = line["y2"].toDouble() - line["y1"].toDouble();
     const double length = std::sqrt(delta_x * delta_x + delta_y * delta_y);
-    const double width = object.contains("pen_width") ? object["pen_width"].toDouble()
-                                                      : kDefaultPenWidth;
+    const double width = object.contains("pen_width")
+                           ? object["pen_width"].toDouble()
+                           : kDefaultPenWidth;
     return Size2D{length, width};
   }
   return Size2D{100.0, 100.0};
@@ -275,14 +276,16 @@ bool ProjectSerializer::load_from_file(const QString& filename,
   std::unordered_map<std::string, std::shared_ptr<MaterialModel>>
     materials_by_name;
   const QJsonArray materials = root.contains("materials")
-                                  ? root["materials"].toArray()
-                                  : root["material_presets"].toArray();
+                                 ? root["materials"].toArray()
+                                 : root["material_presets"].toArray();
   for (const QJsonValue& value : materials) {
     QJsonObject materialObj = value.toObject();
-    const QString name = materialObj["name"].toString(QStringLiteral("Material"));
-    const Color color = materialObj.contains("color")
-                          ? color_from_json(materialObj["color"].toArray())
-                          : color_from_json(materialObj["fill_color"].toArray());
+    const QString name =
+      materialObj["name"].toString(QStringLiteral("Material"));
+    const Color color =
+      materialObj.contains("color")
+        ? color_from_json(materialObj["color"].toArray())
+        : color_from_json(materialObj["fill_color"].toArray());
     auto material = document->create_material(color, name.toStdString());
 
     // Load grid settings
@@ -331,7 +334,8 @@ bool ProjectSerializer::load_from_file(const QString& filename,
       if (obj.contains("rotation")) {
         shape->set_rotation_deg(obj["rotation"].toDouble());
       }
-      const QString mode = obj["material_mode"].toString(QStringLiteral("custom"));
+      const QString mode =
+        obj["material_mode"].toString(QStringLiteral("custom"));
       if (mode == QLatin1String("preset") && obj.contains("material_name")) {
         const std::string matName =
           obj["material_name"].toString().toStdString();

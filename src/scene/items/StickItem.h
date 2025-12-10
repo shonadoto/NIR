@@ -6,12 +6,12 @@
 #include "scene/ISceneObject.h"
 
 class StickItem : public QGraphicsLineItem, public ISceneObject {
-public:
+ public:
   explicit StickItem(const QLineF& line, QGraphicsItem* parent = nullptr);
-    ~StickItem() override = default;
+  ~StickItem() override = default;
 
   QWidget* create_properties_widget(QWidget* parent) override;
-    QJsonObject to_json() const override;
+  QJsonObject to_json() const override;
   void from_json(const QJsonObject& json) override;
   QString type_name() const override {
     return QStringLiteral("stick");
@@ -31,7 +31,7 @@ public:
   QVariant itemChange(GraphicsItemChange change,
                       const QVariant& value) override;
 
-private:
+ private:
   QString name_{"Stick"};
   std::function<void()> geometry_changed_callback_;
 

@@ -495,9 +495,9 @@ void PropertiesBar::setup_material_selector() {
       }
     }
 
-    const QColor newColor = QColorDialog::getColor(currentColor, material_color_btn_,
-                                                    "Choose Material Color",
-                                             QColorDialog::ShowAlphaChannel);
+    const QColor newColor = QColorDialog::getColor(
+      currentColor, material_color_btn_, "Choose Material Color",
+      QColorDialog::ShowAlphaChannel);
     if (newColor.isValid()) {
       if (current_material_ != nullptr) {
         current_material_->set_color(to_model_color(newColor));
@@ -536,8 +536,9 @@ void PropertiesBar::setup_grid_controls() {
       if (updating_ || current_material_shared_ == nullptr) {
         return;
       }
-      const MaterialModel::GridType gridType = static_cast<MaterialModel::GridType>(
-        grid_type_combo_->itemData(index).toInt());
+      const MaterialModel::GridType gridType =
+        static_cast<MaterialModel::GridType>(
+          grid_type_combo_->itemData(index).toInt());
       current_material_shared_->set_grid_type(gridType);
       // Show/hide frequency controls based on grid type
       const bool showGrid = gridType != MaterialModel::GridType::None;
@@ -633,7 +634,8 @@ void PropertiesBar::update_grid_controls() {
   updating_ = true;
 
   // Set grid type
-  const MaterialModel::GridType gridType = current_material_shared_->grid_type();
+  const MaterialModel::GridType gridType =
+    current_material_shared_->grid_type();
   for (int i = 0; i < grid_type_combo_->count(); ++i) {
     if (grid_type_combo_->itemData(i).toInt() == static_cast<int>(gridType)) {
       grid_type_combo_->setCurrentIndex(i);

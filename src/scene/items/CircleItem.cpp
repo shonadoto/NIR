@@ -170,7 +170,8 @@ void CircleItem::paint(QPainter* painter,
   }
 }
 
-void CircleItem::draw_radial_grid(QPainter* painter, const QRectF& /*extendedRect*/,
+void CircleItem::draw_radial_grid(QPainter* painter,
+                                  const QRectF& /*extendedRect*/,
                                   const QRectF& baseRect) const {
   if (material_model_ == nullptr) {
     return;

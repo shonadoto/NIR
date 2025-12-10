@@ -251,7 +251,8 @@ void MainWindow::createActivityObjectsBarAndEditor() {
               if (shapeModel != nullptr && shape_binder_ != nullptr) {
                 auto* item = shape_binder_->item_for(shapeModel);
                 if (item != nullptr && item == current_selected_item_) {
-                  const QString name = QString::fromStdString(shapeModel->name());
+                  const QString name =
+                    QString::fromStdString(shapeModel->name());
                   properties_bar_->update_name(name);
                 }
               }

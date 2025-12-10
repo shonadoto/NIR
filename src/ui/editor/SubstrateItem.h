@@ -6,7 +6,7 @@
 #include "scene/ISceneObject.h"
 
 class SubstrateItem : public QGraphicsItem, public ISceneObject {
-public:
+ public:
   explicit SubstrateItem(const QSizeF& size);
 
   auto boundingRect() const -> QRectF override;
@@ -23,9 +23,9 @@ public:
   }
   void set_fill_color(const QColor& color);
 
-    // ISceneObject interface
+  // ISceneObject interface
   auto create_properties_widget(QWidget* parent) -> QWidget* override;
-    QJsonObject to_json() const override;
+  QJsonObject to_json() const override;
   void from_json(const QJsonObject& json) override;
   QString type_name() const override {
     return QStringLiteral("substrate");
@@ -42,8 +42,8 @@ public:
   }
   void set_material_model(class MaterialModel*) override {}
 
-private:
-    QSizeF size_;
+ private:
+  QSizeF size_;
   QColor fill_color_{240, 240, 240};
   QString name_{"Substrate"};
   std::function<void()> geometry_callback_;

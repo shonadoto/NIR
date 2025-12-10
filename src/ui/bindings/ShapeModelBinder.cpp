@@ -202,7 +202,8 @@ void ShapeModelBinder::handle_change(ISceneObject* item,
       update_material_binding(item, bindingIt->second);
       [[fallthrough]];
     case ModelChange::Type::ColorChanged: {
-      const Color color = model->material() ? model->material()->color() : Color{};
+      const Color color =
+        model->material() ? model->material()->color() : Color{};
       ApplyColorToItem(item, color);
       break;
     }
