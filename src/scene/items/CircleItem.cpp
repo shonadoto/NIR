@@ -12,6 +12,7 @@
 #include <QStyleOptionGraphicsItem>
 #include <QVariant>
 #include <QtMath>
+#include <cmath>
 
 #include "model/MaterialModel.h"
 
@@ -51,9 +52,10 @@ CircleItem::CircleItem(qreal radius, QGraphicsItem* parent)
 
 void CircleItem::set_name(const QString& name) {
   const QString trimmed = name.trimmed();
-  if (!trimmed.isEmpty()) {
-    name_ = trimmed;
+  if (trimmed.isEmpty() || trimmed == name_) {
+    return;
   }
+  name_ = trimmed;
 }
 
 QWidget* CircleItem::create_properties_widget(QWidget* parent) {
@@ -61,36 +63,39 @@ QWidget* CircleItem::create_properties_widget(QWidget* parent) {
   auto* form = new QFormLayout(widget);
   form->setContentsMargins(0, 0, 0, 0);
 
-  auto* radiusSpin = new QDoubleSpinBox(widget);
-  radiusSpin->setRange(kMinRadiusPx, kMaxRadiusPx);
-  radiusSpin->setDecimals(1);
-  radiusSpin->setValue(rect().width() / kRadiusDivisor);
-  QObject::connect(radiusSpin,
+  auto* radius_spin = new QDoubleSpinBox(widget);
+  radius_spin->setRange(kMinRadiusPx, kMaxRadiusPx);
+  radius_spin->setDecimals(1);
+  radius_spin->setValue(rect().width() / kRadiusDivisor);
+  QObject::connect(
+    radius_spin, QOverload<double>::of(&QDoubleSpinBox::valueChanged), widget,
+    [this, radius_spin] {
+      const qreal radius_value = radius_spin->value();
+      if (radius_value < kMinRadiusPx || radius_value > kMaxRadiusPx) {
+        return;  // Invalid radius, ignore
+      }
+      setRect(QRectF(-radius_value, -radius_value,
+                     kRadiusDivisor * radius_value,
+                     kRadiusDivisor * radius_value));
+      setTransformOriginPoint(boundingRect().center());
+      notify_geometry_changed();
+    });
+
+  auto* rotation_spin = new QDoubleSpinBox(widget);
+  rotation_spin->setRange(kMinRotationDeg, kMaxRotationDeg);
+  rotation_spin->setDecimals(1);
+  rotation_spin->setSingleStep(kRotationSpinStep);
+  rotation_spin->setSuffix("°");
+  rotation_spin->setValue(rotation());
+  QObject::connect(rotation_spin,
                    QOverload<double>::of(&QDoubleSpinBox::valueChanged), widget,
-                   [this, radiusSpin] {
-                     const qreal radius_value = radiusSpin->value();
-                     setRect(QRectF(-radius_value, -radius_value,
-                                    kRadiusDivisor * radius_value,
-                                    kRadiusDivisor * radius_value));
-                     setTransformOriginPoint(boundingRect().center());
+                   [this, rotation_spin] {
+                     setRotation(rotation_spin->value());
                      notify_geometry_changed();
                    });
 
-  auto* rotationSpin = new QDoubleSpinBox(widget);
-  rotationSpin->setRange(kMinRotationDeg, kMaxRotationDeg);
-  rotationSpin->setDecimals(1);
-  rotationSpin->setSingleStep(kRotationSpinStep);
-  rotationSpin->setSuffix("°");
-  rotationSpin->setValue(rotation());
-  QObject::connect(rotationSpin,
-                   QOverload<double>::of(&QDoubleSpinBox::valueChanged), widget,
-                   [this, rotationSpin] {
-                     setRotation(rotationSpin->value());
-                     notify_geometry_changed();
-                   });
-
-  form->addRow("Radius:", radiusSpin);
-  form->addRow("Rotation:", rotationSpin);
+  form->addRow("Radius:", radius_spin);
+  form->addRow("Rotation:", rotation_spin);
 
   return widget;
 }
@@ -110,25 +115,50 @@ QJsonObject CircleItem::to_json() const {
 
 void CircleItem::from_json(const QJsonObject& json) {
   if (json.contains("name")) {
-    name_ = json["name"].toString();
+    const QString name = json["name"].toString();
+    if (!name.isEmpty()) {
+      name_ = name;
+    }
   }
   if (json.contains("position")) {
     QJsonArray position_array = json["position"].toArray();
-    setPos(position_array[0].toDouble(), position_array[1].toDouble());
+    if (position_array.size() >= 2) {
+      const double x = position_array[0].toDouble();
+      const double y = position_array[1].toDouble();
+      if (std::isfinite(x) && std::isfinite(y)) {
+        setPos(x, y);
+      }
+    }
   }
   if (json.contains("rotation")) {
-    setRotation(json["rotation"].toDouble());
+    const double rot = json["rotation"].toDouble();
+    if (std::isfinite(rot)) {
+      setRotation(rot);
+    }
   }
   if (json.contains("radius")) {
     const qreal radius_value = json["radius"].toDouble();
-    setRect(QRectF(-radius_value, -radius_value, kRadiusDivisor * radius_value,
-                   kRadiusDivisor * radius_value));
-    setTransformOriginPoint(boundingRect().center());
+    if (std::isfinite(radius_value) && radius_value > 0.0 &&
+        radius_value >= kMinRadiusPx && radius_value <= kMaxRadiusPx) {
+      setRect(QRectF(-radius_value, -radius_value,
+                     kRadiusDivisor * radius_value,
+                     kRadiusDivisor * radius_value));
+      setTransformOriginPoint(boundingRect().center());
+    }
   }
   if (json.contains("fill_color")) {
     QJsonArray color_array = json["fill_color"].toArray();
-    setBrush(QBrush(QColor(color_array[0].toInt(), color_array[1].toInt(),
-                           color_array[2].toInt(), color_array[3].toInt())));
+    if (color_array.size() >= 4) {
+      const int r = color_array[0].toInt();
+      const int g = color_array[1].toInt();
+      const int b = color_array[2].toInt();
+      const int a = color_array[3].toInt();
+      // Validate color values are in valid range [0, 255]
+      if (r >= 0 && r <= 255 && g >= 0 && g <= 255 && b >= 0 && b <= 255 &&
+          a >= 0 && a <= 255) {
+        setBrush(QBrush(QColor(r, g, b, a)));
+      }
+    }
   }
 }
 
@@ -161,12 +191,12 @@ void CircleItem::paint(QPainter* painter,
   if (material_model_ != nullptr &&
       material_model_->grid_type() == MaterialModel::GridType::Internal) {
     // Calculate extended rect for grid (includes outer ring)
-    const QRectF baseRect = rect();
-    const qreal radius = baseRect.width() / 2.0;
+    const QRectF base_rect = rect();
+    const qreal radius = base_rect.width() / 2.0;
     const qreal extend = radius * kOuterRingExtendRatio;
-    const QRectF extendedRect =
-      baseRect.adjusted(-extend, -extend, extend, extend);
-    draw_radial_grid(painter, extendedRect, baseRect);
+    const QRectF extended_rect =
+      base_rect.adjusted(-extend, -extend, extend, extend);
+    draw_radial_grid(painter, extended_rect, base_rect);
   }
 }
 
@@ -185,104 +215,112 @@ void CircleItem::draw_radial_grid(QPainter* painter,
   // Use composition mode that doesn't darken - draw only lines, no fill
   painter->setCompositionMode(QPainter::CompositionMode_SourceOver);
   painter->setBrush(Qt::NoBrush);
-  QPen gridPen(QColor(0, 0, 0, kGridPenAlpha));
-  gridPen.setWidthF(kGridPenWidth);
-  painter->setPen(gridPen);
+  QPen grid_pen(QColor(0, 0, 0, kGridPenAlpha));
+  grid_pen.setWidthF(kGridPenWidth);
+  painter->setPen(grid_pen);
 
   const QPointF center = baseRect.center();
   const qreal radius = baseRect.width() / kRadiusDivisor;
-  const double freqRadial = material_model_->grid_frequency_x();
-  const double freqConcentric =
+  const double freq_radial = material_model_->grid_frequency_x();
+  const double freq_concentric =
     material_model_->grid_frequency_y();  // Used for both inner and outer rings
 
   // Calculate ring boundaries
-  const qreal innerRingStartRadius = radius * kInnerRingStartRatio;
-  const qreal innerRingEndRadius = radius;
-  const qreal outerRingStartRadius = radius;
-  const qreal outerRingEndRadius = radius * (1.0 + kOuterRingExtendRatio);
-  const qreal boundaryMargin = radius * kBoundaryRingMargin;
+  const qreal inner_ring_start_radius = radius * kInnerRingStartRatio;
+  const qreal inner_ring_end_radius = radius;
+  const qreal outer_ring_start_radius = radius;
+  const qreal outer_ring_end_radius = radius * (1.0 + kOuterRingExtendRatio);
+  const qreal boundary_margin = radius * kBoundaryRingMargin;
 
   // Draw concentric circles first (so radial lines appear on top)
 
   // Draw inner ring concentric circles
-  const qreal innerRingWidth = innerRingEndRadius - innerRingStartRadius;
-  const qreal innerSpacing =
-    innerRingWidth / (freqConcentric + 1);  // +1 accounts for boundary circle
-  const qreal firstInnerRadius =
-    innerRingStartRadius + innerSpacing;  // First circle (closest to center)
-  qreal currentInnerRadius = firstInnerRadius;
-  while (currentInnerRadius < innerRingEndRadius - boundaryMargin) {
-    painter->drawEllipse(center, currentInnerRadius, currentInnerRadius);
-    currentInnerRadius += innerSpacing;
+  const qreal inner_ring_width =
+    inner_ring_end_radius - inner_ring_start_radius;
+  const qreal inner_spacing =
+    inner_ring_width /
+    (freq_concentric + 1);  // +1 accounts for boundary circle
+  const qreal first_inner_radius =
+    inner_ring_start_radius +
+    inner_spacing;  // First circle (closest to center)
+  qreal current_inner_radius = first_inner_radius;
+  while (current_inner_radius < inner_ring_end_radius - boundary_margin) {
+    painter->drawEllipse(center, current_inner_radius, current_inner_radius);
+    current_inner_radius += inner_spacing;
   }
 
   // Draw inner ring boundary circle
-  painter->drawEllipse(center, innerRingEndRadius, innerRingEndRadius);
+  painter->drawEllipse(center, inner_ring_end_radius, inner_ring_end_radius);
 
   // Draw main boundary circle
   painter->drawEllipse(center, radius, radius);
 
   // Draw outer ring concentric circles
-  const qreal outerRingWidth = outerRingEndRadius - outerRingStartRadius;
-  const qreal outerSpacing =
-    outerRingWidth / (freqConcentric + 1);  // +1 accounts for boundary circle
-  qreal currentOuterRadius =
-    outerRingStartRadius + boundaryMargin + outerSpacing;
-  qreal lastOuterRadius = outerRingStartRadius +
-                          boundaryMargin;  // Last circle (farthest from center)
-  while (currentOuterRadius < outerRingEndRadius) {
-    painter->drawEllipse(center, currentOuterRadius, currentOuterRadius);
-    lastOuterRadius = currentOuterRadius;
-    currentOuterRadius += outerSpacing;
+  const qreal outer_ring_width =
+    outer_ring_end_radius - outer_ring_start_radius;
+  const qreal outer_spacing =
+    outer_ring_width /
+    (freq_concentric + 1);  // +1 accounts for boundary circle
+  qreal current_outer_radius =
+    outer_ring_start_radius + boundary_margin + outer_spacing;
+  qreal last_outer_radius =
+    outer_ring_start_radius +
+    boundary_margin;  // Last circle (farthest from center)
+  while (current_outer_radius < outer_ring_end_radius) {
+    painter->drawEllipse(center, current_outer_radius, current_outer_radius);
+    last_outer_radius = current_outer_radius;
+    current_outer_radius += outer_spacing;
   }
 
   // Draw radial lines (after circles so they appear on top)
-  const int numRadialLines = static_cast<int>(freqRadial);
+  const int num_radial_lines = static_cast<int>(freq_radial);
   // Precompute angles to avoid repeated calculations
-  QVector<qreal> angles(numRadialLines);
-  QVector<qreal> cosValues(numRadialLines);
-  QVector<qreal> sinValues(numRadialLines);
-  for (int i = 0; i < numRadialLines; ++i) {
-    angles[i] = (kFullCircleDegrees * i) / numRadialLines;
+  QVector<qreal> angles(num_radial_lines);
+  QVector<qreal> cos_values(num_radial_lines);
+  QVector<qreal> sin_values(num_radial_lines);
+  for (int i = 0; i < num_radial_lines; ++i) {
+    angles[i] = (kFullCircleDegrees * i) / num_radial_lines;
     const qreal radians = qDegreesToRadians(angles[i]);
-    cosValues[i] = qCos(radians);
-    sinValues[i] = qSin(radians);
+    cos_values[i] = qCos(radians);
+    sin_values[i] = qSin(radians);
   }
 
-  for (int i = 0; i < numRadialLines; ++i) {
-    const qreal cosA = cosValues[i];
-    const qreal sinA = sinValues[i];
+  for (int i = 0; i < num_radial_lines; ++i) {
+    const qreal cos_a = cos_values[i];
+    const qreal sin_a = sin_values[i];
 
     // Inner ring: from first circle to boundary
-    const QPointF innerStart =
-      center + QPointF(firstInnerRadius * cosA, firstInnerRadius * sinA);
-    const QPointF innerEnd =
-      center + QPointF(innerRingEndRadius * cosA, innerRingEndRadius * sinA);
-    painter->drawLine(innerStart, innerEnd);
+    const QPointF inner_start =
+      center + QPointF(first_inner_radius * cos_a, first_inner_radius * sin_a);
+    const QPointF inner_end = center + QPointF(inner_ring_end_radius * cos_a,
+                                               inner_ring_end_radius * sin_a);
+    painter->drawLine(inner_start, inner_end);
 
     // Outer ring: from boundary to last circle
-    const QPointF outerStart = center + QPointF(outerRingStartRadius * cosA,
-                                                outerRingStartRadius * sinA);
-    const QPointF outerEnd =
-      center + QPointF(lastOuterRadius * cosA, lastOuterRadius * sinA);
-    painter->drawLine(outerStart, outerEnd);
+    const QPointF outer_start =
+      center +
+      QPointF(outer_ring_start_radius * cos_a, outer_ring_start_radius * sin_a);
+    const QPointF outer_end =
+      center + QPointF(last_outer_radius * cos_a, last_outer_radius * sin_a);
+    painter->drawLine(outer_start, outer_end);
   }
 
   painter->restore();
 }
 
 QRectF CircleItem::boundingRect() const {
-  const QRectF baseRect = QGraphicsEllipseItem::boundingRect();
+  const QRectF base_rect = QGraphicsEllipseItem::boundingRect();
   // Extend bounding rect to include outer grid ring
   // Use the actual rect() to get the circle's radius
   const qreal radius = rect().width() / kRadiusDivisor;
   const qreal extend = radius * kOuterRingExtendRatio;
-  return baseRect.adjusted(-extend, -extend, extend, extend);
+  return base_rect.adjusted(-extend, -extend, extend, extend);
 }
 
 QVariant CircleItem::itemChange(GraphicsItemChange change,
                                 const QVariant& value) {
-  if (change == ItemPositionHasChanged || change == ItemRotationHasChanged) {
+  if (change == ItemPositionHasChanged || change == ItemRotationHasChanged ||
+      change == ItemTransformHasChanged) {
     notify_geometry_changed();
   }
   return QGraphicsEllipseItem::itemChange(change, value);

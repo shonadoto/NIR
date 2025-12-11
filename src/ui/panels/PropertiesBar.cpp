@@ -28,7 +28,6 @@ constexpr int kPropertiesBarMarginPx = 8;
 constexpr int kPropertiesBarSpacingPx = 4;
 }  // namespace
 
-// NOLINTNEXTLINE(readability-function-cognitive-complexity)
 PropertiesBar::PropertiesBar(QWidget* parent)
     : QWidget(parent),
       layout_(new QVBoxLayout(this)),
@@ -90,8 +89,8 @@ PropertiesBar::PropertiesBar(QWidget* parent)
       current_model_->set_name(trimmed.toStdString());
     } else if (current_item_ != nullptr) {
       // Validate item is still valid before accessing
-      if (auto* graphicsItem = dynamic_cast<QGraphicsItem*>(current_item_)) {
-        if (graphicsItem->scene() == nullptr) {
+      if (auto* graphics_item = dynamic_cast<QGraphicsItem*>(current_item_)) {
+        if (graphics_item->scene() == nullptr) {
           LOG_WARN()
             << "PropertiesBar: name_changed callback - item no longer in scene";
           current_item_ = nullptr;
@@ -121,7 +120,6 @@ PropertiesBar::~PropertiesBar() {
   }
 }
 
-// NOLINTNEXTLINE(readability-function-cognitive-complexity)
 void PropertiesBar::set_selected_item(ISceneObject* item, const QString& name) {
   LOG_DEBUG() << "PropertiesBar::set_selected_item called with item=" << item
               << " name=" << name.toStdString();
@@ -161,8 +159,8 @@ void PropertiesBar::set_selected_item(ISceneObject* item, const QString& name) {
 
   // Validate that item is still valid (check if it's a QGraphicsItem that's
   // still in scene)
-  if (auto* graphicsItem = dynamic_cast<QGraphicsItem*>(current_item_)) {
-    if (graphicsItem->scene() == nullptr) {
+  if (auto* graphics_item = dynamic_cast<QGraphicsItem*>(current_item_)) {
+    if (graphics_item->scene() == nullptr) {
       LOG_WARN() << "PropertiesBar::set_selected_item: item is not in scene, "
                     "clearing. Item ptr="
                  << current_item_;
@@ -195,8 +193,8 @@ void PropertiesBar::set_selected_item(ISceneObject* item, const QString& name) {
   // Update type selector
   if (is_inclusion_item()) {
     type_combo_->setVisible(true);
-    const QString currentType = current_item_->type_name();
-    const int index = type_combo_->findData(currentType);
+    const QString current_type = current_item_->type_name();
+    const int index = type_combo_->findData(current_type);
     if (index >= 0) {
       updating_ = true;
       type_combo_->setCurrentIndex(index);
@@ -214,11 +212,11 @@ void PropertiesBar::set_selected_item(ISceneObject* item, const QString& name) {
   // Create new content from item (object-specific properties: size, rotation,
   // etc.)
   content_widget_ = current_item_->create_properties_widget(this);
-  int insertIndex =
+  int insert_index =
     3;  // After name_edit (type_label=0, type_combo=1, name_edit=2)
   if (content_widget_ != nullptr) {
-    layout_->insertWidget(insertIndex, content_widget_);
-    insertIndex++;  // Material controls will go after content_widget
+    layout_->insertWidget(insert_index, content_widget_);
+    insert_index++;  // Material controls will go after content_widget
     // Disable color editing in content widget if material preset is selected
     if (item_material_ != nullptr && content_widget_ != nullptr) {
       // Find and disable color button in content widget
@@ -254,12 +252,12 @@ void PropertiesBar::set_selected_item(ISceneObject* item, const QString& name) {
       layout_->removeWidget(grid_frequency_y_spin_);
     }
     // Insert after content_widget
-    layout_->insertWidget(insertIndex++, material_combo_);
-    layout_->insertWidget(insertIndex++, material_color_btn_);
-    layout_->insertWidget(insertIndex++, grid_type_label_);
-    layout_->insertWidget(insertIndex++, grid_type_combo_);
-    layout_->insertWidget(insertIndex++, grid_frequency_x_spin_);
-    layout_->insertWidget(insertIndex++, grid_frequency_y_spin_);
+    layout_->insertWidget(insert_index++, material_combo_);
+    layout_->insertWidget(insert_index++, material_color_btn_);
+    layout_->insertWidget(insert_index++, grid_type_label_);
+    layout_->insertWidget(insert_index++, grid_type_combo_);
+    layout_->insertWidget(insert_index++, grid_frequency_x_spin_);
+    layout_->insertWidget(insert_index++, grid_frequency_y_spin_);
     material_combo_->setVisible(true);
     material_color_btn_->setVisible(true);
     material_color_btn_->setEnabled(can_edit_material_color());
@@ -299,8 +297,8 @@ void PropertiesBar::update_name(const QString& name) {
     return;
   }
   // Validate item is still valid
-  if (auto* graphicsItem = dynamic_cast<QGraphicsItem*>(current_item_)) {
-    if (graphicsItem->scene() == nullptr) {
+  if (auto* graphics_item = dynamic_cast<QGraphicsItem*>(current_item_)) {
+    if (graphics_item->scene() == nullptr) {
       LOG_WARN() << "PropertiesBar::update_name: item no longer in scene";
       current_item_ = nullptr;
       return;
@@ -403,17 +401,16 @@ void PropertiesBar::setup_type_selector() {
             if (updating_ || current_item_ == nullptr || !is_inclusion_item()) {
               return;
             }
-            const QString newType = type_combo_->itemData(index).toString();
-            const QString currentType = current_item_->type_name();
-            if (newType != currentType) {
-              emit type_changed(current_item_, newType);
+            const QString new_type = type_combo_->itemData(index).toString();
+            const QString current_type = current_item_->type_name();
+            if (new_type != current_type) {
+              emit type_changed(current_item_, new_type);
             }
           });
 
   layout_->addWidget(type_combo_);
 }
 
-// NOLINTNEXTLINE(readability-function-cognitive-complexity)
 void PropertiesBar::setup_material_selector() {
   material_combo_ = new QComboBox(this);
   material_combo_->addItem("Custom",
@@ -426,8 +423,7 @@ void PropertiesBar::setup_material_selector() {
       if (updating_ || current_item_ == nullptr || model_ == nullptr) {
         return;
       }
-      MaterialModel* material =
-        material_combo_->itemData(index).value<MaterialModel*>();
+      auto* material = material_combo_->itemData(index).value<MaterialModel*>();
       item_material_ = material;
 
       // Apply to current shape model
@@ -475,39 +471,39 @@ void PropertiesBar::setup_material_selector() {
     if (updating_) {
       return;
     }
-    QColor currentColor;
+    QColor current_color;
     if (current_material_ != nullptr) {
-      currentColor = to_qcolor(current_material_->color());
+      current_color = to_qcolor(current_material_->color());
     } else if (current_item_ != nullptr && item_material_ != nullptr) {
-      currentColor = to_qcolor(item_material_->color());
+      current_color = to_qcolor(item_material_->color());
     } else if (current_item_ != nullptr) {
       // Get color from item
-      if (auto* graphicsItem = dynamic_cast<QGraphicsItem*>(current_item_)) {
-        if (auto* rectItem = dynamic_cast<QGraphicsRectItem*>(graphicsItem)) {
-          currentColor = rectItem->brush().color();
-        } else if (auto* ellipseItem =
-                     dynamic_cast<QGraphicsEllipseItem*>(graphicsItem)) {
-          currentColor = ellipseItem->brush().color();
-        } else if (auto* lineItem =
-                     dynamic_cast<QGraphicsLineItem*>(graphicsItem)) {
-          currentColor = lineItem->pen().color();
+      if (auto* graphics_item = dynamic_cast<QGraphicsItem*>(current_item_)) {
+        if (auto* rect_item = dynamic_cast<QGraphicsRectItem*>(graphics_item)) {
+          current_color = rect_item->brush().color();
+        } else if (auto* ellipse_item =
+                     dynamic_cast<QGraphicsEllipseItem*>(graphics_item)) {
+          current_color = ellipse_item->brush().color();
+        } else if (auto* line_item =
+                     dynamic_cast<QGraphicsLineItem*>(graphics_item)) {
+          current_color = line_item->pen().color();
         }
       }
     }
 
-    const QColor newColor = QColorDialog::getColor(
-      currentColor, material_color_btn_, "Choose Material Color",
+    const QColor new_color = QColorDialog::getColor(
+      current_color, material_color_btn_, "Choose Material Color",
       QColorDialog::ShowAlphaChannel);
-    if (newColor.isValid()) {
+    if (new_color.isValid()) {
       if (current_material_ != nullptr) {
-        current_material_->set_color(to_model_color(newColor));
-        emit material_color_changed(current_material_, newColor);
+        current_material_->set_color(to_model_color(new_color));
+        emit material_color_changed(current_material_, new_color);
       } else if (current_item_ != nullptr && item_material_ != nullptr) {
-        item_material_->set_color(to_model_color(newColor));
-        emit material_color_changed(item_material_, newColor);
+        item_material_->set_color(to_model_color(new_color));
+        emit material_color_changed(item_material_, new_color);
       } else if (current_model_ != nullptr &&
                  current_model_->material() != nullptr) {
-        current_model_->material()->set_color(to_model_color(newColor));
+        current_model_->material()->set_color(to_model_color(new_color));
       }
       update_material_color_button();
     }
@@ -517,7 +513,6 @@ void PropertiesBar::setup_material_selector() {
   // Don't add them here to avoid wrong order
 }
 
-// NOLINTNEXTLINE(readability-function-cognitive-complexity)
 void PropertiesBar::setup_grid_controls() {
   grid_type_label_ = new QLabel("Grid Type:", this);
   grid_type_label_->setVisible(false);
@@ -531,19 +526,18 @@ void PropertiesBar::setup_grid_controls() {
 
   connect(
     grid_type_combo_, QOverload<int>::of(&QComboBox::currentIndexChanged), this,
-    // NOLINTNEXTLINE(readability-function-cognitive-complexity)
     [this](int index) {
       if (updating_ || current_material_shared_ == nullptr) {
         return;
       }
-      const MaterialModel::GridType gridType =
+      const MaterialModel::GridType grid_type =
         static_cast<MaterialModel::GridType>(
           grid_type_combo_->itemData(index).toInt());
-      current_material_shared_->set_grid_type(gridType);
+      current_material_shared_->set_grid_type(grid_type);
       // Show/hide frequency controls based on grid type
-      const bool showGrid = gridType != MaterialModel::GridType::None;
-      grid_frequency_x_spin_->setVisible(showGrid);
-      grid_frequency_y_spin_->setVisible(showGrid);
+      const bool show_grid = grid_type != MaterialModel::GridType::None;
+      grid_frequency_x_spin_->setVisible(show_grid);
+      grid_frequency_y_spin_->setVisible(show_grid);
       // Update current item if custom material
       if (current_item_ != nullptr && current_model_ != nullptr &&
           current_model_->material_mode() == ShapeModel::MaterialMode::Custom) {
@@ -556,8 +550,8 @@ void PropertiesBar::setup_grid_controls() {
           for (const auto& shape : doc->shapes()) {
             if (shape->material() == current_material_shared_) {
               if (auto* item = shape_binder_->item_for(shape)) {
-                if (auto* sceneObj = dynamic_cast<ISceneObject*>(item)) {
-                  sceneObj->set_material_model(current_material_shared_.get());
+                if (auto* scene_obj = dynamic_cast<ISceneObject*>(item)) {
+                  scene_obj->set_material_model(current_material_shared_.get());
                 }
               }
             }
@@ -578,8 +572,7 @@ void PropertiesBar::setup_grid_controls() {
   grid_frequency_y_spin_->setSingleStep(1.0);
   grid_frequency_y_spin_->setVisible(false);
 
-  // NOLINTNEXTLINE(readability-function-cognitive-complexity)
-  auto updateGrid = [this]() {
+  auto update_grid = [this]() {
     if (updating_ || current_material_shared_ == nullptr) {
       return;
     }
@@ -596,8 +589,8 @@ void PropertiesBar::setup_grid_controls() {
           if (shape->material() == current_material_shared_) {
             if (auto* item = shape_binder_->item_for(shape)) {
               // item_for returns QGraphicsItem*, no need for dynamic_cast
-              if (auto* graphicsItem = item) {
-                graphicsItem->update();
+              if (auto* graphics_item = item) {
+                graphics_item->update();
               }
             }
           }
@@ -608,22 +601,22 @@ void PropertiesBar::setup_grid_controls() {
 
   connect(grid_frequency_x_spin_,
           QOverload<double>::of(&QDoubleSpinBox::valueChanged), this,
-          [this, updateGrid](double value) {
+          [this, update_grid](double value) {
             if (updating_ || current_material_shared_ == nullptr) {
               return;
             }
             current_material_shared_->set_grid_frequency_x(value);
-            updateGrid();
+            update_grid();
           });
 
   connect(grid_frequency_y_spin_,
           QOverload<double>::of(&QDoubleSpinBox::valueChanged), this,
-          [this, updateGrid](double value) {
+          [this, update_grid](double value) {
             if (updating_ || current_material_shared_ == nullptr) {
               return;
             }
             current_material_shared_->set_grid_frequency_y(value);
-            updateGrid();
+            update_grid();
           });
 }
 
@@ -634,34 +627,34 @@ void PropertiesBar::update_grid_controls() {
   updating_ = true;
 
   // Set grid type
-  const MaterialModel::GridType gridType =
+  const MaterialModel::GridType grid_type =
     current_material_shared_->grid_type();
   for (int i = 0; i < grid_type_combo_->count(); ++i) {
-    if (grid_type_combo_->itemData(i).toInt() == static_cast<int>(gridType)) {
+    if (grid_type_combo_->itemData(i).toInt() == static_cast<int>(grid_type)) {
       grid_type_combo_->setCurrentIndex(i);
       break;
     }
   }
 
   // Set grid frequencies and show/hide based on grid type
-  const bool showGrid = gridType != MaterialModel::GridType::None;
+  const bool show_grid = grid_type != MaterialModel::GridType::None;
   // Label and combo are always visible when grid controls are shown (they
   // control the grid type) Only frequency controls are hidden when grid type is
   // None
   grid_frequency_x_spin_->setValue(
     current_material_shared_->grid_frequency_x());
-  grid_frequency_x_spin_->setVisible(showGrid);
+  grid_frequency_x_spin_->setVisible(show_grid);
   grid_frequency_y_spin_->setValue(
     current_material_shared_->grid_frequency_y());
-  grid_frequency_y_spin_->setVisible(showGrid);
+  grid_frequency_y_spin_->setVisible(show_grid);
 
   // Update labels based on shape type
-  if (current_item_ != nullptr && showGrid) {
-    const QString typeName = current_item_->type_name();
-    if (typeName == "rectangle") {
+  if (current_item_ != nullptr && show_grid) {
+    const QString type_name = current_item_->type_name();
+    if (type_name == "rectangle") {
       grid_frequency_x_spin_->setSuffix(" horizontal");
       grid_frequency_y_spin_->setSuffix(" vertical");
-    } else if (typeName == "circle" || typeName == "ellipse") {
+    } else if (type_name == "circle" || type_name == "ellipse") {
       grid_frequency_x_spin_->setSuffix(" radial");
       grid_frequency_y_spin_->setSuffix(" concentric");
     } else {
@@ -725,8 +718,8 @@ void PropertiesBar::set_selected_material(MaterialModel* material) {
   }
   // Insert after name_edit (index 2: type_label=0, name_edit=2, no type_combo
   // for preset)
-  int insertIndex = 3;
-  layout_->insertWidget(insertIndex++, material_color_btn_);
+  int insert_index = 3;
+  layout_->insertWidget(insert_index++, material_color_btn_);
   material_color_btn_->setVisible(true);
   material_color_btn_->setEnabled(true);
 
@@ -743,10 +736,10 @@ void PropertiesBar::set_selected_material(MaterialModel* material) {
   if (grid_frequency_y_spin_->parent() == this) {
     layout_->removeWidget(grid_frequency_y_spin_);
   }
-  layout_->insertWidget(insertIndex++, grid_type_label_);
-  layout_->insertWidget(insertIndex++, grid_type_combo_);
-  layout_->insertWidget(insertIndex++, grid_frequency_x_spin_);
-  layout_->insertWidget(insertIndex++, grid_frequency_y_spin_);
+  layout_->insertWidget(insert_index++, grid_type_label_);
+  layout_->insertWidget(insert_index++, grid_type_combo_);
+  layout_->insertWidget(insert_index++, grid_frequency_x_spin_);
+  layout_->insertWidget(insert_index++, grid_frequency_y_spin_);
   grid_type_label_->setVisible(true);
   grid_type_combo_->setVisible(true);
 
@@ -803,15 +796,15 @@ void PropertiesBar::update_material_color_button() {
     color = to_qcolor(item_material_->color());
   } else if (current_item_ != nullptr) {
     // Get color from item
-    if (auto* graphicsItem = dynamic_cast<QGraphicsItem*>(current_item_)) {
-      if (auto* rectItem = dynamic_cast<QGraphicsRectItem*>(graphicsItem)) {
-        color = rectItem->brush().color();
-      } else if (auto* ellipseItem =
-                   dynamic_cast<QGraphicsEllipseItem*>(graphicsItem)) {
-        color = ellipseItem->brush().color();
-      } else if (auto* lineItem =
-                   dynamic_cast<QGraphicsLineItem*>(graphicsItem)) {
-        color = lineItem->pen().color();
+    if (auto* graphics_item = dynamic_cast<QGraphicsItem*>(current_item_)) {
+      if (auto* rect_item = dynamic_cast<QGraphicsRectItem*>(graphics_item)) {
+        color = rect_item->brush().color();
+      } else if (auto* ellipse_item =
+                   dynamic_cast<QGraphicsEllipseItem*>(graphics_item)) {
+        color = ellipse_item->brush().color();
+      } else if (auto* line_item =
+                   dynamic_cast<QGraphicsLineItem*>(graphics_item)) {
+        color = line_item->pen().color();
       }
     }
   }

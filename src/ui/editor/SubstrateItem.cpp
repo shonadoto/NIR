@@ -6,6 +6,7 @@
 #include <QJsonObject>
 #include <QPainter>
 #include <QPushButton>
+#include <cmath>
 
 namespace {
 constexpr qreal kOutlineWidthPx = 1.0;
@@ -22,9 +23,10 @@ SubstrateItem::SubstrateItem(const QSizeF& size) : size_(size) {
 
 void SubstrateItem::set_name(const QString& name) {
   const QString trimmed = name.trimmed();
-  if (!trimmed.isEmpty()) {
-    name_ = trimmed;
+  if (trimmed.isEmpty() || trimmed == name_) {
+    return;
   }
+  name_ = trimmed;
 }
 
 auto SubstrateItem::boundingRect() const -> QRectF {
@@ -52,6 +54,11 @@ void SubstrateItem::set_size(const QSizeF& size) {
   if (size == size_) {
     return;
   }
+  // Validate size: both dimensions must be positive and finite
+  if (size.width() <= 0.0 || size.height() <= 0.0 ||
+      !std::isfinite(size.width()) || !std::isfinite(size.height())) {
+    return;  // Invalid size, ignore
+  }
   prepareGeometryChange();
   size_ = size;
 }
@@ -66,16 +73,16 @@ auto SubstrateItem::create_properties_widget(QWidget* parent) -> QWidget* {
   auto* form = new QFormLayout(widget);
   form->setContentsMargins(0, 0, 0, 0);
 
-  auto* colorBtn = new QPushButton("Choose Color", widget);
-  QObject::connect(colorBtn, &QPushButton::clicked, widget, [this, colorBtn] {
+  auto* color_btn = new QPushButton("Choose Color", widget);
+  QObject::connect(color_btn, &QPushButton::clicked, widget, [this, color_btn] {
     const QColor color =
-      QColorDialog::getColor(fill_color_, colorBtn, "Choose Substrate Color");
+      QColorDialog::getColor(fill_color_, color_btn, "Choose Substrate Color");
     if (color.isValid()) {
       set_fill_color(color);
     }
   });
 
-  form->addRow("Color:", colorBtn);
+  form->addRow("Color:", color_btn);
 
   return widget;
 }
@@ -93,14 +100,31 @@ QJsonObject SubstrateItem::to_json() const {
 
 void SubstrateItem::from_json(const QJsonObject& json) {
   if (json.contains("name")) {
-    name_ = json["name"].toString();
+    const QString name = json["name"].toString();
+    if (!name.isEmpty()) {
+      name_ = name;
+    }
   }
   if (json.contains("width") && json.contains("height")) {
-    set_size(QSizeF(json["width"].toDouble(), json["height"].toDouble()));
+    const double width = json["width"].toDouble();
+    const double height = json["height"].toDouble();
+    if (std::isfinite(width) && std::isfinite(height) && width > 0.0 &&
+        height > 0.0) {
+      set_size(QSizeF(width, height));
+    }
   }
   if (json.contains("fill_color")) {
     QJsonArray color_array = json["fill_color"].toArray();
-    set_fill_color(QColor(color_array[0].toInt(), color_array[1].toInt(),
-                          color_array[2].toInt(), color_array[3].toInt()));
+    if (color_array.size() >= 4) {
+      const int r = color_array[0].toInt();
+      const int g = color_array[1].toInt();
+      const int b = color_array[2].toInt();
+      const int a = color_array[3].toInt();
+      // Validate color values are in valid range [0, 255]
+      if (r >= 0 && r <= 255 && g >= 0 && g <= 255 && b >= 0 && b <= 255 &&
+          a >= 0 && a <= 255) {
+        set_fill_color(QColor(r, g, b, a));
+      }
+    }
   }
 }

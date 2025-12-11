@@ -12,13 +12,9 @@
 #include <algorithm>
 #include <memory>
 
-#include "model/MaterialModel.h"
 #include "model/ObjectTreeModel.h"
 #include "scene/ISceneObject.h"
 #include "scene/items/CircleItem.h"
-#include "scene/items/EllipseItem.h"
-#include "scene/items/RectangleItem.h"
-#include "scene/items/StickItem.h"
 #include "ui/bindings/ShapeModelBinder.h"
 #include "ui/editor/EditorArea.h"
 
@@ -45,6 +41,7 @@ ObjectsBar::ObjectsBar(QWidget* parent)
 
   layout->addWidget(tree_view_);
   tree_view_->setHeaderHidden(true);
+  // header
   tree_view_->setEditTriggers(QAbstractItemView::EditKeyPressed |
                               QAbstractItemView::SelectedClicked |
                               QAbstractItemView::DoubleClicked);
@@ -58,6 +55,7 @@ void ObjectsBar::setup_toolbar() {
   toolbar_ = new QToolBar(this);
   toolbar_->setMovable(false);
   toolbar_->setFloatable(false);
+  // namespace
   toolbar_->setToolButtonStyle(Qt::ToolButtonTextBesideIcon);
 
   add_btn_ = new QPushButton("+", this);
@@ -83,13 +81,14 @@ void ObjectsBar::set_shape_binder(ShapeModelBinder* binder) {
   shape_binder_ = binder;
 }
 
-// NOLINTNEXTLINE(readability-function-cognitive-complexity)
 void ObjectsBar::add_item_or_preset() {
   if (tree_view_->model() == nullptr) {
     return;
   }
 
-  auto* model = qobject_cast<ObjectTreeModel*>(tree_view_->model());
+  auto* model = qobject_cast<ObjectTreeModel*>(
+    tree_view_
+      ->model());  // NOLINT(misc-include-cleaner) qobject_cast is a Qt macro
   if (model == nullptr) {
     return;
   }
@@ -97,11 +96,11 @@ void ObjectsBar::add_item_or_preset() {
   if (auto* sel = tree_view_->selectionModel()) {
     const QModelIndex current = sel->currentIndex();
     const QModelIndex root;
-    const QModelIndex inclusionsIdx = model->index(0, 0, root);
-    const QModelIndex materialsIdx = model->index(1, 0, root);
+    const QModelIndex inclusions_idx = model->index(0, 0, root);
+    const QModelIndex materials_idx = model->index(1, 0, root);
 
-    bool isInclusionsContext = false;
-    bool isMaterialsContext = false;
+    bool is_inclusions_context = false;
+    bool is_materials_context = false;
 
     if (current.isValid()) {
       // Check if current selection is under Inclusions or Materials
@@ -109,26 +108,26 @@ void ObjectsBar::add_item_or_preset() {
       while (ancestor.isValid() && ancestor.parent().isValid()) {
         ancestor = ancestor.parent();
       }
-      if (ancestor == inclusionsIdx) {
-        isInclusionsContext = true;
-      } else if (ancestor == materialsIdx) {
-        isMaterialsContext = true;
+      if (ancestor == inclusions_idx) {
+        is_inclusions_context = true;
+      } else if (ancestor == materials_idx) {
+        is_materials_context = true;
       } else if (ancestor == root || !ancestor.isValid()) {
         // If selected root or nothing, check which group node is selected
-        if (current == inclusionsIdx) {
-          isInclusionsContext = true;
-        } else if (current == materialsIdx) {
-          isMaterialsContext = true;
+        if (current == inclusions_idx) {
+          is_inclusions_context = true;
+        } else if (current == materials_idx) {
+          is_materials_context = true;
         }
         // Default to Inclusions if nothing clear (handled below)
       }
     } else {
       // If nothing selected, default to Inclusions
-      isInclusionsContext = true;
+      is_inclusions_context = true;
     }
 
     // If context is Inclusions, add a circle (default shape)
-    if (isInclusionsContext) {
+    if (is_inclusions_context) {
       if (editor_area_ == nullptr) {
         return;
       }
@@ -141,27 +140,27 @@ void ObjectsBar::add_item_or_preset() {
       auto* circle = new CircleItem(kDefaultNewCircleRadius);
       scene->addItem(circle);
       circle->setPos(center);
-      std::shared_ptr<ShapeModel> shapeModel;
+      std::shared_ptr<ShapeModel> shape_model;
       if (shape_binder_ != nullptr) {
-        shapeModel = shape_binder_->bind_shape(circle);
+        shape_model = shape_binder_->bind_shape(circle);
       }
       // Select the new item
-      if (shapeModel) {
-        const QModelIndex itemIdx = model->index_from_shape(shapeModel);
-        if (itemIdx.isValid()) {
+      if (shape_model) {
+        const QModelIndex item_idx = model->index_from_shape(shape_model);
+        if (item_idx.isValid()) {
           tree_view_->selectionModel()->setCurrentIndex(
-            itemIdx, QItemSelectionModel::ClearAndSelect);
-          tree_view_->edit(itemIdx);  // Start editing name
+            item_idx, QItemSelectionModel::ClearAndSelect);
+          tree_view_->edit(item_idx);  // Start editing name
         }
       }
-    } else if (isMaterialsContext) {
+    } else if (is_materials_context) {
       auto material = model->create_material(QStringLiteral("New Material"));
-      tree_view_->expand(materialsIdx);
-      const QModelIndex materialIdx = model->index_from_material(material);
-      if (materialIdx.isValid()) {
+      tree_view_->expand(materials_idx);
+      const QModelIndex material_idx = model->index_from_material(material);
+      if (material_idx.isValid()) {
         tree_view_->selectionModel()->setCurrentIndex(
-          materialIdx, QItemSelectionModel::ClearAndSelect);
-        tree_view_->edit(materialIdx);
+          material_idx, QItemSelectionModel::ClearAndSelect);
+        tree_view_->edit(material_idx);
       }
     }
   }
@@ -172,7 +171,9 @@ void ObjectsBar::remove_selected_item() {
     return;
   }
 
-  auto* model = qobject_cast<ObjectTreeModel*>(tree_view_->model());
+  auto* model = qobject_cast<ObjectTreeModel*>(
+    tree_view_
+      ->model());  // NOLINT(misc-include-cleaner) qobject_cast is a Qt macro
   if (model == nullptr) {
     return;
   }
@@ -244,6 +245,7 @@ void ObjectsBar::showEvent(QShowEvent* event) {
   QWidget::showEvent(event);
 }
 
+// header
 void ObjectsBar::set_model(QAbstractItemModel* model) {
   tree_view_->setModel(model);
   tree_view_->installEventFilter(this);
@@ -267,19 +269,22 @@ void ObjectsBar::set_model(QAbstractItemModel* model) {
   update_button_states();
 }
 
-// NOLINTNEXTLINE(readability-function-cognitive-complexity)
-bool ObjectsBar::eventFilter(QObject* obj, QEvent* event) {
+// necessary for event filtering NOLINTNEXTLINE(misc-include-cleaner) QObject
+// and QEvent are in Qt headers
+auto ObjectsBar::eventFilter(QObject* obj, QEvent* event)
+  -> bool {  // NOLINT(readability-function-cognitive-complexity)
   if (obj == tree_view_) {
     if (event->type() == QEvent::KeyPress) {
       // QKeyEvent is not polymorphic, static_cast is safe here
-      // NOLINTNEXTLINE(cppcoreguidelines-pro-type-static-cast-downcast,readability-identifier-length)
       auto* key_event = static_cast<QKeyEvent*>(event);
       if (key_event->isAutoRepeat()) {
         return false;  // ignore auto-repeat to prevent deleting multiple items
                        // unintentionally
       }
-      if (key_event->key() == Qt::Key_Delete ||
-          key_event->key() == Qt::Key_Backspace) {
+      // Qt::Key_Backspace are in Qt namespace
+      if (key_event->key() == Qt::Key_Delete ||  // NOLINT(misc-include-cleaner)
+          key_event->key() ==
+            Qt::Key_Backspace) {  // NOLINT(misc-include-cleaner)
         if (auto* model = tree_view_->model()) {
           if (auto* sel = tree_view_->selectionModel()) {
             // Delete all selected rows (column 0) from bottom to top
@@ -289,7 +294,7 @@ bool ObjectsBar::eventFilter(QObject* obj, QEvent* event) {
               [](const QModelIndex& index_a, const QModelIndex& index_b) {
                 return index_a.row() > index_b.row();
               });
-            bool anyRemoved = false;
+            bool any_removed = false;
             for (const QModelIndex& idx : rows) {
               if (!idx.isValid()) {
                 continue;
@@ -299,9 +304,9 @@ bool ObjectsBar::eventFilter(QObject* obj, QEvent* event) {
               if (!idx.parent().isValid()) {
                 continue;
               }
-              anyRemoved |= model->removeRow(idx.row(), idx.parent());
+              any_removed |= model->removeRow(idx.row(), idx.parent());
             }
-            if (anyRemoved) {
+            if (any_removed) {
               return true;  // handled
             }
           }

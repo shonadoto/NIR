@@ -35,9 +35,10 @@ StickItem::StickItem(const QLineF& line, QGraphicsItem* parent)
 
 void StickItem::set_name(const QString& name) {
   const QString trimmed = name.trimmed();
-  if (!trimmed.isEmpty()) {
-    name_ = trimmed;
+  if (trimmed.isEmpty() || trimmed == name_) {
+    return;
   }
+  name_ = trimmed;
 }
 
 QWidget* StickItem::create_properties_widget(QWidget* parent) {
@@ -45,21 +46,25 @@ QWidget* StickItem::create_properties_widget(QWidget* parent) {
   auto* form = new QFormLayout(widget);
   form->setContentsMargins(0, 0, 0, 0);
 
-  auto* lengthSpin = new QDoubleSpinBox(widget);
-  lengthSpin->setRange(kMinLengthPx, kMaxLengthPx);
-  lengthSpin->setDecimals(1);
+  auto* length_spin = new QDoubleSpinBox(widget);
+  length_spin->setRange(kMinLengthPx, kMaxLengthPx);
+  length_spin->setDecimals(1);
   const QLineF line_item = line();
   const qreal len = std::sqrt(line_item.dx() * line_item.dx() +
                               line_item.dy() * line_item.dy());
-  lengthSpin->setValue(len);
+  length_spin->setValue(len);
   QObject::connect(
-    lengthSpin, QOverload<double>::of(&QDoubleSpinBox::valueChanged), widget,
-    [this, lengthSpin] {
+    length_spin, QOverload<double>::of(&QDoubleSpinBox::valueChanged), widget,
+    [this, length_spin] {
+      const qreal new_length = length_spin->value();
+      if (new_length < kMinLengthPx || new_length > kMaxLengthPx) {
+        return;  // Invalid length, ignore
+      }
       QLineF line_item = line();
-      const qreal oldLen = std::sqrt(line_item.dx() * line_item.dx() +
-                                     line_item.dy() * line_item.dy());
-      if (oldLen > 0) {
-        const qreal scale = lengthSpin->value() / oldLen;
+      const qreal old_len = std::sqrt(line_item.dx() * line_item.dx() +
+                                      line_item.dy() * line_item.dy());
+      if (old_len > 0) {
+        const qreal scale = new_length / old_len;
         line_item.setP2(QPointF(line_item.x1() + line_item.dx() * scale,
                                 line_item.y1() + line_item.dy() * scale));
         setLine(line_item);
@@ -68,21 +73,21 @@ QWidget* StickItem::create_properties_widget(QWidget* parent) {
       }
     });
 
-  auto* rotationSpin = new QDoubleSpinBox(widget);
-  rotationSpin->setRange(kMinRotationDeg, kMaxRotationDeg);
-  rotationSpin->setDecimals(1);
-  rotationSpin->setSingleStep(kRotationSpinStep);
-  rotationSpin->setSuffix("°");
-  rotationSpin->setValue(rotation());
-  QObject::connect(rotationSpin,
+  auto* rotation_spin = new QDoubleSpinBox(widget);
+  rotation_spin->setRange(kMinRotationDeg, kMaxRotationDeg);
+  rotation_spin->setDecimals(1);
+  rotation_spin->setSingleStep(kRotationSpinStep);
+  rotation_spin->setSuffix("°");
+  rotation_spin->setValue(rotation());
+  QObject::connect(rotation_spin,
                    QOverload<double>::of(&QDoubleSpinBox::valueChanged), widget,
-                   [this, rotationSpin] {
-                     setRotation(rotationSpin->value());
+                   [this, rotation_spin] {
+                     setRotation(rotation_spin->value());
                      notify_geometry_changed();
                    });
 
-  form->addRow("Length:", lengthSpin);
-  form->addRow("Rotation:", rotationSpin);
+  form->addRow("Length:", length_spin);
+  form->addRow("Rotation:", rotation_spin);
 
   return widget;
 }
@@ -107,30 +112,63 @@ QJsonObject StickItem::to_json() const {
 
 void StickItem::from_json(const QJsonObject& json) {
   if (json.contains("name")) {
-    name_ = json["name"].toString();
+    const QString name = json["name"].toString();
+    if (!name.isEmpty()) {
+      name_ = name;
+    }
   }
   if (json.contains("position")) {
     QJsonArray position_array = json["position"].toArray();
-    setPos(position_array[0].toDouble(), position_array[1].toDouble());
+    if (position_array.size() >= 2) {
+      const double x = position_array[0].toDouble();
+      const double y = position_array[1].toDouble();
+      if (std::isfinite(x) && std::isfinite(y)) {
+        setPos(x, y);
+      }
+    }
   }
   if (json.contains("rotation")) {
-    setRotation(json["rotation"].toDouble());
+    const double rot = json["rotation"].toDouble();
+    if (std::isfinite(rot)) {
+      setRotation(rot);
+    }
   }
   if (json.contains("line")) {
     QJsonObject line_obj = json["line"].toObject();
-    setLine(QLineF(line_obj["x1"].toDouble(), line_obj["y1"].toDouble(),
-                   line_obj["x2"].toDouble(), line_obj["y2"].toDouble()));
-    setTransformOriginPoint(boundingRect().center());
+    if (line_obj.contains("x1") && line_obj.contains("y1") &&
+        line_obj.contains("x2") && line_obj.contains("y2")) {
+      const double x1 = line_obj["x1"].toDouble();
+      const double y1 = line_obj["y1"].toDouble();
+      const double x2 = line_obj["x2"].toDouble();
+      const double y2 = line_obj["y2"].toDouble();
+      if (std::isfinite(x1) && std::isfinite(y1) && std::isfinite(x2) &&
+          std::isfinite(y2)) {
+        setLine(QLineF(x1, y1, x2, y2));
+        setTransformOriginPoint(boundingRect().center());
+      }
+    }
   }
   if (json.contains("pen_color")) {
     QJsonArray color_array = json["pen_color"].toArray();
-    QPen pen_item = pen();
-    pen_item.setColor(QColor(color_array[0].toInt(), color_array[1].toInt(),
-                             color_array[2].toInt(), color_array[3].toInt()));
-    if (json.contains("pen_width")) {
-      pen_item.setWidthF(json["pen_width"].toDouble());
+    if (color_array.size() >= 4) {
+      const int r = color_array[0].toInt();
+      const int g = color_array[1].toInt();
+      const int b = color_array[2].toInt();
+      const int a = color_array[3].toInt();
+      // Validate color values are in valid range [0, 255]
+      if (r >= 0 && r <= 255 && g >= 0 && g <= 255 && b >= 0 && b <= 255 &&
+          a >= 0 && a <= 255) {
+        QPen pen_item = pen();
+        pen_item.setColor(QColor(r, g, b, a));
+        if (json.contains("pen_width")) {
+          const double width = json["pen_width"].toDouble();
+          if (std::isfinite(width) && width > 0.0) {
+            pen_item.setWidthF(width);
+          }
+        }
+        setPen(pen_item);
+      }
     }
-    setPen(pen_item);
   }
 }
 
@@ -179,7 +217,8 @@ void StickItem::paint(QPainter* painter, const QStyleOptionGraphicsItem* option,
 
 QVariant StickItem::itemChange(GraphicsItemChange change,
                                const QVariant& value) {
-  if (change == ItemPositionHasChanged || change == ItemRotationHasChanged) {
+  if (change == ItemPositionHasChanged || change == ItemRotationHasChanged ||
+      change == ItemTransformHasChanged) {
     notify_geometry_changed();
   }
   return QGraphicsLineItem::itemChange(change, value);

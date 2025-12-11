@@ -185,11 +185,11 @@ void ShapeModelBinder::clear_bindings() {
 
 void ShapeModelBinder::handle_change(ISceneObject* item,
                                      const ModelChange& change) {
-  auto bindingIt = bindings_.find(item);
-  if (bindingIt == bindings_.end()) {
+  auto binding_it = bindings_.find(item);
+  if (binding_it == bindings_.end()) {
     return;
   }
-  auto model = bindingIt->second.model;
+  auto model = binding_it->second.model;
   if (!model) {
     return;
   }
@@ -199,7 +199,7 @@ void ShapeModelBinder::handle_change(ISceneObject* item,
       apply_name(item, model->name());
       break;
     case ModelChange::Type::MaterialChanged:
-      update_material_binding(item, bindingIt->second);
+      update_material_binding(item, binding_it->second);
       [[fallthrough]];
     case ModelChange::Type::ColorChanged: {
       const Color color =
@@ -215,18 +215,15 @@ void ShapeModelBinder::handle_change(ISceneObject* item,
   }
 }
 
-// NOLINTNEXTLINE(readability-convert-member-functions-to-static)
 void ShapeModelBinder::apply_name(ISceneObject* item, const std::string& name) {
   item->set_name(QString::fromStdString(name));
 }
 
-// NOLINTNEXTLINE(readability-convert-member-functions-to-static)
 void ShapeModelBinder::apply_color(ISceneObject* item, const Color& color) {
   ApplyColorToItem(item, color);
 }
 
-// NOLINTNEXTLINE(readability-convert-member-functions-to-static)
-auto ShapeModelBinder::extract_color(const ISceneObject* item) const -> Color {
+auto ShapeModelBinder::extract_color(const ISceneObject* item) -> Color {
   return ColorFromItem(item);
 }
 
@@ -259,7 +256,6 @@ void ShapeModelBinder::update_material_binding(ISceneObject* item,
     });
 }
 
-// NOLINTNEXTLINE(readability-convert-member-functions-to-static)
 void ShapeModelBinder::detach_material_binding(Binding& binding) {
   if (binding.bound_material && binding.material_connection_id != 0) {
     binding.bound_material->on_changed().disconnect(
@@ -274,43 +270,45 @@ void ShapeModelBinder::update_model_geometry(
   if (item == nullptr || model == nullptr) {
     return;
   }
-  auto* graphicsItem = dynamic_cast<QGraphicsItem*>(item);
-  if (graphicsItem == nullptr) {
+  auto* graphics_item = dynamic_cast<QGraphicsItem*>(item);
+  if (graphics_item == nullptr) {
     return;
   }
-  auto bindingIt = bindings_.find(item);
-  if (bindingIt != bindings_.end()) {
-    bindingIt->second.suppress_model_geometry_signal = true;
+  auto binding_it = bindings_.find(item);
+  if (binding_it != bindings_.end()) {
+    binding_it->second.suppress_model_geometry_signal = true;
   }
-  model->set_position(ToModelPoint(graphicsItem->pos()));
-  model->set_rotation_deg(graphicsItem->rotation());
+  model->set_position(ToModelPoint(graphics_item->pos()));
+  model->set_rotation_deg(graphics_item->rotation());
 
   // Check CircleItem first (before QGraphicsEllipseItem) since CircleItem
   // inherits from it
-  if (auto* circleItem = dynamic_cast<CircleItem*>(item)) {
+  if (auto* circle_item = dynamic_cast<CircleItem*>(item)) {
     // Circle: rect().width() is diameter, model stores diameter x diameter
-    const QRectF rect = circleItem->rect();
+    const QRectF rect = circle_item->rect();
     const qreal diameter =
       rect.width();  // For circle, width == height == diameter
     model->set_size(Size2D{diameter, diameter});
-  } else if (auto* rectItem = dynamic_cast<QGraphicsRectItem*>(graphicsItem)) {
-    const QRectF rect = rectItem->rect();
+  } else if (auto* rect_item =
+               dynamic_cast<QGraphicsRectItem*>(graphics_item)) {
+    const QRectF rect = rect_item->rect();
     model->set_size(Size2D{rect.width(), rect.height()});
-  } else if (auto* ellipseItem =
-               dynamic_cast<QGraphicsEllipseItem*>(graphicsItem)) {
+  } else if (auto* ellipse_item =
+               dynamic_cast<QGraphicsEllipseItem*>(graphics_item)) {
     // This handles EllipseItem (not CircleItem, as it's checked above)
-    const QRectF rect = ellipseItem->rect();
+    const QRectF rect = ellipse_item->rect();
     model->set_size(Size2D{rect.width(), rect.height()});
-  } else if (auto* lineItem = dynamic_cast<QGraphicsLineItem*>(graphicsItem)) {
-    const qreal length = lineItem->line().length();
-    model->set_size(Size2D{length, lineItem->pen().widthF()});
+  } else if (auto* line_item =
+               dynamic_cast<QGraphicsLineItem*>(graphics_item)) {
+    const qreal length = line_item->line().length();
+    model->set_size(Size2D{length, line_item->pen().widthF()});
   } else {
-    const QSizeF size = graphicsItem->boundingRect().size();
+    const QSizeF size = graphics_item->boundingRect().size();
     model->set_size(Size2D{size.width(), size.height()});
   }
 
-  if (bindingIt != bindings_.end()) {
-    bindingIt->second.suppress_model_geometry_signal = false;
+  if (binding_it != bindings_.end()) {
+    binding_it->second.suppress_model_geometry_signal = false;
   }
 }
 
@@ -319,8 +317,8 @@ void ShapeModelBinder::apply_geometry(
   if (item == nullptr || model == nullptr) {
     return;
   }
-  auto* graphicsItem = dynamic_cast<QGraphicsItem*>(item);
-  if (graphicsItem == nullptr) {
+  auto* graphics_item = dynamic_cast<QGraphicsItem*>(item);
+  if (graphics_item == nullptr) {
     return;
   }
   auto binding_iterator = bindings_.find(item);
@@ -331,42 +329,44 @@ void ShapeModelBinder::apply_geometry(
     binding_iterator->second.suppress_geometry_callback = true;
   }
 
-  graphicsItem->setPos(ToQPoint(model->position()));
-  graphicsItem->setRotation(model->rotation_deg());
+  graphics_item->setPos(ToQPoint(model->position()));
+  graphics_item->setRotation(model->rotation_deg());
 
   const Size2D size = model->size();
   constexpr double kDiameterMultiplier = 2.0;
-  if (auto* rectItem = dynamic_cast<QGraphicsRectItem*>(graphicsItem)) {
-    QRectF rect = rectItem->rect();
+  if (auto* rect_item = dynamic_cast<QGraphicsRectItem*>(graphics_item)) {
+    QRectF rect = rect_item->rect();
     rect.setWidth(size.width);
     rect.setHeight(size.height);
-    rectItem->setRect(rect);
-    rectItem->setTransformOriginPoint(rectItem->boundingRect().center());
-  } else if (auto* circleItem = dynamic_cast<CircleItem*>(item)) {
+    rect_item->setRect(rect);
+    rect_item->setTransformOriginPoint(rect_item->boundingRect().center());
+  } else if (auto* circle_item = dynamic_cast<CircleItem*>(item)) {
     // Circle: size stores diameter x diameter, rect must be centered at (0,0)
     const qreal radius = size.width / 2.0;
-    circleItem->setRect(QRectF(-radius, -radius, kDiameterMultiplier * radius,
-                               kDiameterMultiplier * radius));
+    circle_item->setRect(QRectF(-radius, -radius, kDiameterMultiplier * radius,
+                                kDiameterMultiplier * radius));
     // Circle is always centered at (0,0), so transform origin is at (0,0)
     // relative to item
-    circleItem->setTransformOriginPoint(QPointF(0, 0));
-  } else if (auto* ellipseItem =
-               dynamic_cast<QGraphicsEllipseItem*>(graphicsItem)) {
-    QRectF rect = ellipseItem->rect();
+    circle_item->setTransformOriginPoint(QPointF(0, 0));
+  } else if (auto* ellipse_item =
+               dynamic_cast<QGraphicsEllipseItem*>(graphics_item)) {
+    QRectF rect = ellipse_item->rect();
     rect.setWidth(size.width);
     rect.setHeight(size.height);
-    ellipseItem->setRect(rect);
-    ellipseItem->setTransformOriginPoint(ellipseItem->boundingRect().center());
-  } else if (auto* lineItem = dynamic_cast<QGraphicsLineItem*>(graphicsItem)) {
-    const qreal halfLength = size.width / 2.0;
-    lineItem->setLine(QLineF(-halfLength, 0.0, halfLength, 0.0));
-    lineItem->setTransformOriginPoint(lineItem->boundingRect().center());
+    ellipse_item->setRect(rect);
+    ellipse_item->setTransformOriginPoint(
+      ellipse_item->boundingRect().center());
+  } else if (auto* line_item =
+               dynamic_cast<QGraphicsLineItem*>(graphics_item)) {
+    const qreal half_length = size.width / 2.0;
+    line_item->setLine(QLineF(-half_length, 0.0, half_length, 0.0));
+    line_item->setTransformOriginPoint(line_item->boundingRect().center());
     // For stick items, keep fixed pen width
     constexpr double kStickPenWidth = 2.0;
     if (dynamic_cast<StickItem*>(item) != nullptr) {
-      QPen pen = lineItem->pen();
+      QPen pen = line_item->pen();
       pen.setWidthF(kStickPenWidth);  // Fixed width for stick
-      lineItem->setPen(pen);
+      line_item->setPen(pen);
     }
   }
 

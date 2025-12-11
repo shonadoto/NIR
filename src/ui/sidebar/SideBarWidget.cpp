@@ -91,7 +91,7 @@ void SideBarWidget::setActive(const QString& entry_id) {
 }
 
 void SideBarWidget::applyWidth() {
-  int stackWidth = 0;
+  int stack_width = 0;
   if (current_id_.has_value()) {
     if (!id_to_entry_.contains(current_id_.value())) {
       throw std::runtime_error(QString("SideBarWidget: Entry not found: %1")
@@ -99,10 +99,10 @@ void SideBarWidget::applyWidth() {
                                  .toStdString());
     }
     auto& entry = id_to_entry_[current_id_.value()];
-    stackWidth =
+    stack_width =
       entry.last_width > 0 ? entry.last_width : entry.preferred_width;
-    stack_.setFixedWidth(stackWidth);
+    stack_.setFixedWidth(stack_width);
   }
-  const int barW = activity_bar_.sizeHint().width();
-  setFixedWidth(barW + stackWidth);
+  const int bar_w = activity_bar_.sizeHint().width();
+  setFixedWidth(bar_w + stack_width);
 }

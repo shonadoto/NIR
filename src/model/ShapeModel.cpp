@@ -64,14 +64,25 @@ void ShapeModel::set_size(const Size2D& size) {
   if (size == size_) {
     return;
   }
+  if (!size.is_valid()) {
+    return;  // Invalid size, ignore
+  }
   size_ = size;
   notify_change(ModelChange{ModelChange::Type::GeometryChanged, "size"});
 }
 
 void ShapeModel::set_rotation_deg(double rotation) {
-  if (rotation == rotation_deg_) {
+  // Normalize rotation to [0, 360) range
+  double normalized = rotation;
+  while (normalized < 0.0) {
+    normalized += 360.0;
+  }
+  while (normalized >= 360.0) {
+    normalized -= 360.0;
+  }
+  if (normalized == rotation_deg_) {
     return;
   }
-  rotation_deg_ = rotation;
+  rotation_deg_ = normalized;
   notify_change(ModelChange{ModelChange::Type::GeometryChanged, "rotation"});
 }

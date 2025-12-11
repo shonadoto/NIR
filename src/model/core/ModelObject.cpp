@@ -9,7 +9,6 @@
 
 namespace {
 // Global atomic counter for generating unique IDs - must be mutable
-// NOLINTNEXTLINE(cppcoreguidelines-avoid-non-const-global-variables)
 std::atomic<uint64_t> g_id_counter{0};
 }  // namespace
 
@@ -18,8 +17,17 @@ ModelObject::ModelObject() : id_(GenerateId()) {}
 void ModelObject::set_name(const std::string& name) {
   // Trim whitespace from name
   std::string trimmed = name;
-  trimmed.erase(0, trimmed.find_first_not_of(" \t\n\r"));
-  trimmed.erase(trimmed.find_last_not_of(" \t\n\r") + 1);
+  const size_t first = trimmed.find_first_not_of(" \t\n\r");
+  if (first != std::string::npos) {
+    trimmed.erase(0, first);
+    const size_t last = trimmed.find_last_not_of(" \t\n\r");
+    if (last != std::string::npos) {
+      trimmed.erase(last + 1);
+    }
+  } else {
+    // String contains only whitespace
+    trimmed.clear();
+  }
 
   if (trimmed == name_) {
     return;

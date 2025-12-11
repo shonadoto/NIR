@@ -56,6 +56,9 @@ auto DocumentModel::create_material(const Color& color, const std::string& name)
 
 void DocumentModel::set_substrate(
   const std::shared_ptr<SubstrateModel>& substrate) {
+  if (!substrate) {
+    return;  // Invalid substrate, ignore
+  }
   substrate_ = substrate;
   substrate_->on_changed().connect(
     [this](const ModelChange& change) { notify_all(change); });

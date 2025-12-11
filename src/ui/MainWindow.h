@@ -36,17 +36,18 @@ class MainWindow : public QMainWindow {
   void open_project();
   void rebuild_scene_from_document();
   void sync_document_from_scene();
-  ISceneObject* create_item_for_shape(const std::shared_ptr<ShapeModel>& shape);
+  static ISceneObject* create_item_for_shape(
+    const std::shared_ptr<ShapeModel>& shape);
 
   // Shape type change handling
   void change_shape_type(ISceneObject* old_item, const QString& new_type);
-  ShapeModel::ShapeType string_to_shape_type(const QString& type) const;
-  auto convert_shape_size(ShapeModel::ShapeType from,
-                          ShapeModel::ShapeType target_type,
-                          const Size2D& size) const -> Size2D;
+  static ShapeModel::ShapeType string_to_shape_type(const QString& type);
+  static auto convert_shape_size(ShapeModel::ShapeType from,
+                                 ShapeModel::ShapeType target_type,
+                                 const Size2D& size) -> Size2D;
   void replace_shape_item(ISceneObject* old_item,
                           const std::shared_ptr<ShapeModel>& model,
-                          const QPointF& centerPosition, qreal rotation,
+                          const QPointF& center_position, qreal rotation,
                           const QString& name);
 
  private:

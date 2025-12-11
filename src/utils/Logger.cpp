@@ -107,8 +107,10 @@ Logger::~Logger() {
 void Logger::log(LogLevel level, const QString& message, const QString& file,
                  int line, const QString& function) {
   // Check if initialized first (without lock) to avoid unnecessary locking
+  // Note: This is a double-check pattern - we check again inside the lock
   if (!initialized_) {
     // Initialize without holding lock to avoid deadlock
+    // initialize() will lock its own mutex
     initialize();
   }
 
@@ -117,6 +119,15 @@ void Logger::log(LogLevel level, const QString& message, const QString& file,
   if (!mutex_.tryLock(100)) {
     // If we can't lock quickly, just output to stderr
     qWarning() << "[Logger locked, outputting to stderr]" << message;
+    return;
+  }
+
+  // Double-check: verify initialized state while holding lock
+  // (in case another thread initialized between our check and lock)
+  if (!initialized_) {
+    mutex_.unlock();
+    // Should not happen, but handle gracefully
+    qWarning() << "[Logger not initialized, outputting to stderr]" << message;
     return;
   }
 

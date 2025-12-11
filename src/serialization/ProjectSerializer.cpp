@@ -149,11 +149,11 @@ bool ProjectSerializer::save_to_file(const QString& filename,
 
   if (auto substrate = document->substrate()) {
     const Size2D size = substrate->size();
-    QJsonObject substrateObj;
-    substrateObj["name"] = QString::fromStdString(substrate->name());
-    substrateObj["size"] = size_to_json(size);
-    substrateObj["color"] = color_to_json(substrate->color());
-    root["substrate"] = substrateObj;
+    QJsonObject substrate_obj;
+    substrate_obj["name"] = QString::fromStdString(substrate->name());
+    substrate_obj["size"] = size_to_json(size);
+    substrate_obj["color"] = color_to_json(substrate->color());
+    root["substrate"] = substrate_obj;
   }
 
   QJsonArray materials;
@@ -161,16 +161,16 @@ bool ProjectSerializer::save_to_file(const QString& filename,
     if (!material) {
       continue;
     }
-    QJsonObject materialObj;
-    materialObj["name"] = QString::fromStdString(material->name());
-    materialObj["color"] = color_to_json(material->color());
+    QJsonObject material_obj;
+    material_obj["name"] = QString::fromStdString(material->name());
+    material_obj["color"] = color_to_json(material->color());
     // Save grid settings
-    materialObj["grid_type"] = static_cast<int>(material->grid_type());
-    materialObj["grid_frequency_x"] = material->grid_frequency_x();
-    materialObj["grid_frequency_y"] = material->grid_frequency_y();
+    material_obj["grid_type"] = static_cast<int>(material->grid_type());
+    material_obj["grid_frequency_x"] = material->grid_frequency_x();
+    material_obj["grid_frequency_y"] = material->grid_frequency_y();
     // Backward compatibility
-    materialObj["grid_frequency"] = material->grid_frequency_x();
-    materials.append(materialObj);
+    material_obj["grid_frequency"] = material->grid_frequency_x();
+    materials.append(material_obj);
   }
   root["materials"] = materials;
   root["material_presets"] = materials;  // backward compatibility
@@ -219,7 +219,6 @@ bool ProjectSerializer::save_to_file(const QString& filename,
   return true;
 }
 
-// NOLINTNEXTLINE(readability-function-cognitive-complexity)
 bool ProjectSerializer::load_from_file(const QString& filename,
                                        DocumentModel* document) {
   LOG_INFO() << "Loading project from: " << filename.toStdString();
@@ -253,22 +252,23 @@ bool ProjectSerializer::load_from_file(const QString& filename,
   document->clear_materials();
 
   if (root.contains("substrate")) {
-    QJsonObject substrateObj = root["substrate"].toObject();
+    QJsonObject substrate_obj = root["substrate"].toObject();
     auto substrate = std::make_shared<SubstrateModel>();
-    substrate->set_name(
-      substrateObj["name"].toString(QStringLiteral("Substrate")).toStdString());
-    if (substrateObj.contains("size")) {
-      substrate->set_size(size_from_json(substrateObj["size"].toObject()));
-    } else if (substrateObj.contains("width") &&
-               substrateObj.contains("height")) {
-      substrate->set_size(Size2D{substrateObj["width"].toDouble(),
-                                 substrateObj["height"].toDouble()});
+    substrate->set_name(substrate_obj["name"]
+                          .toString(QStringLiteral("Substrate"))
+                          .toStdString());
+    if (substrate_obj.contains("size")) {
+      substrate->set_size(size_from_json(substrate_obj["size"].toObject()));
+    } else if (substrate_obj.contains("width") &&
+               substrate_obj.contains("height")) {
+      substrate->set_size(Size2D{substrate_obj["width"].toDouble(),
+                                 substrate_obj["height"].toDouble()});
     }
-    if (substrateObj.contains("color")) {
-      substrate->set_color(color_from_json(substrateObj["color"].toArray()));
-    } else if (substrateObj.contains("fill_color")) {
+    if (substrate_obj.contains("color")) {
+      substrate->set_color(color_from_json(substrate_obj["color"].toArray()));
+    } else if (substrate_obj.contains("fill_color")) {
       substrate->set_color(
-        color_from_json(substrateObj["fill_color"].toArray()));
+        color_from_json(substrate_obj["fill_color"].toArray()));
     }
     document->set_substrate(substrate);
   }
@@ -278,39 +278,38 @@ bool ProjectSerializer::load_from_file(const QString& filename,
   const QJsonArray materials = root.contains("materials")
                                  ? root["materials"].toArray()
                                  : root["material_presets"].toArray();
-  for (const QJsonValue& value : materials) {
-    QJsonObject materialObj = value.toObject();
+  for (const auto& value : materials) {
+    QJsonObject material_obj = value.toObject();
     const QString name =
-      materialObj["name"].toString(QStringLiteral("Material"));
+      material_obj["name"].toString(QStringLiteral("Material"));
     const Color color =
-      materialObj.contains("color")
-        ? color_from_json(materialObj["color"].toArray())
-        : color_from_json(materialObj["fill_color"].toArray());
+      material_obj.contains("color")
+        ? color_from_json(material_obj["color"].toArray())
+        : color_from_json(material_obj["fill_color"].toArray());
     auto material = document->create_material(color, name.toStdString());
 
     // Load grid settings
-    if (materialObj.contains("grid_type")) {
-      const int gridTypeValue = materialObj["grid_type"].toInt();
+    if (material_obj.contains("grid_type")) {
+      const int grid_type_value = material_obj["grid_type"].toInt();
       // Handle backward compatibility: old Radial (1) becomes Internal (1)
-      MaterialModel::GridType gridType =
-        static_cast<MaterialModel::GridType>(gridTypeValue);
+      auto grid_type = static_cast<MaterialModel::GridType>(grid_type_value);
       // Ensure only valid values (0 or 1)
-      if (gridTypeValue > 1) {
-        gridType = MaterialModel::GridType::None;
+      if (grid_type_value > 1) {
+        grid_type = MaterialModel::GridType::None;
       }
-      material->set_grid_type(gridType);
+      material->set_grid_type(grid_type);
     }
     // Load grid frequency (new format with x and y, or old format for backward
     // compatibility)
-    if (materialObj.contains("grid_frequency_x") &&
-        materialObj.contains("grid_frequency_y")) {
+    if (material_obj.contains("grid_frequency_x") &&
+        material_obj.contains("grid_frequency_y")) {
       material->set_grid_frequency_x(
-        materialObj["grid_frequency_x"].toDouble());
+        material_obj["grid_frequency_x"].toDouble());
       material->set_grid_frequency_y(
-        materialObj["grid_frequency_y"].toDouble());
-    } else if (materialObj.contains("grid_frequency")) {
+        material_obj["grid_frequency_y"].toDouble());
+    } else if (material_obj.contains("grid_frequency")) {
       // Backward compatibility: use old single value for both x and y
-      const double freq = materialObj["grid_frequency"].toDouble();
+      const double freq = material_obj["grid_frequency"].toDouble();
       material->set_grid_frequency_x(freq);
       material->set_grid_frequency_y(freq);
     }
@@ -320,7 +319,7 @@ bool ProjectSerializer::load_from_file(const QString& filename,
 
   if (root.contains("objects")) {
     const QJsonArray shapes = root["objects"].toArray();
-    for (const QJsonValue& value : shapes) {
+    for (const auto& value : shapes) {
       QJsonObject obj = value.toObject();
       const QString name = obj["name"].toString(QStringLiteral("Shape"));
       const ShapeModel::ShapeType type = shape_type_from_string(
@@ -337,9 +336,9 @@ bool ProjectSerializer::load_from_file(const QString& filename,
       const QString mode =
         obj["material_mode"].toString(QStringLiteral("custom"));
       if (mode == QLatin1String("preset") && obj.contains("material_name")) {
-        const std::string matName =
+        const std::string mat_name =
           obj["material_name"].toString().toStdString();
-        auto material_iterator = materials_by_name.find(matName);
+        auto material_iterator = materials_by_name.find(mat_name);
         if (material_iterator != materials_by_name.end()) {
           shape->assign_material(material_iterator->second);
         } else {
@@ -353,16 +352,16 @@ bool ProjectSerializer::load_from_file(const QString& filename,
         }
         // Load grid settings
         if (obj.contains("grid_type")) {
-          const int gridTypeValue = obj["grid_type"].toInt();
+          const int grid_type_value = obj["grid_type"].toInt();
           // Handle backward compatibility: old Radial (1) becomes Internal (1)
           // None = 0, Internal = 1 (Radial was also 1, so it maps correctly)
-          MaterialModel::GridType gridType =
-            static_cast<MaterialModel::GridType>(gridTypeValue);
+          auto grid_type =
+            static_cast<MaterialModel::GridType>(grid_type_value);
           // Ensure only valid values (0 or 1)
-          if (gridTypeValue > 1) {
-            gridType = MaterialModel::GridType::None;
+          if (grid_type_value > 1) {
+            grid_type = MaterialModel::GridType::None;
           }
-          shape->material()->set_grid_type(gridType);
+          shape->material()->set_grid_type(grid_type);
         }
         // Load grid frequency (new format with x and y, or old format for
         // backward compatibility)

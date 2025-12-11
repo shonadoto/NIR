@@ -1,5 +1,7 @@
 #include "model/MaterialModel.h"
 
+#include <cmath>
+
 #include "model/core/ModelTypes.h"
 
 MaterialModel::MaterialModel(const Color& color) : color_(color) {}
@@ -21,7 +23,9 @@ void MaterialModel::set_grid_type(GridType type) {
 }
 
 void MaterialModel::set_grid_frequency_x(double frequency) {
-  if (grid_frequency_x_ == frequency || frequency < 1.0) {
+  // Validate frequency: must be >= 1.0, finite, and not NaN
+  if (grid_frequency_x_ == frequency || frequency < 1.0 ||
+      !std::isfinite(frequency)) {
     return;
   }
   grid_frequency_x_ = frequency;
@@ -29,7 +33,9 @@ void MaterialModel::set_grid_frequency_x(double frequency) {
 }
 
 void MaterialModel::set_grid_frequency_y(double frequency) {
-  if (grid_frequency_y_ == frequency || frequency < 1.0) {
+  // Validate frequency: must be >= 1.0, finite, and not NaN
+  if (grid_frequency_y_ == frequency || frequency < 1.0 ||
+      !std::isfinite(frequency)) {
     return;
   }
   grid_frequency_y_ = frequency;

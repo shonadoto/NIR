@@ -19,10 +19,12 @@ struct Color {
   /**
    * @brief Check if color values are valid (all in range 0-255).
    * @return true if color is valid.
+   * @note Since color components are uint8_t, they are always in valid range.
+   *       This method is kept for API consistency with Size2D::is_valid() and
+   *       potential future validation needs.
    */
   bool is_valid() const {
     // uint8_t is always in range 0-255, so this is always true
-    // But we keep it for API consistency and potential future validation
     return true;
   }
 };

@@ -8,12 +8,12 @@ ActivityButton::ActivityButton(QWidget* parent) : QToolButton(parent) {
   setAutoRaise(true);
 }
 
-void ActivityButton::configure(const QIcon& icon, const QSize& iconSize,
+void ActivityButton::configure(const QIcon& icon, const QSize& icon_size,
                                bool checkable, bool checked) {
   setIcon(icon);
-  setIconSize(iconSize);
+  setIconSize(icon_size);
   setCheckable(checkable);
   setChecked(checked);
-  setFixedSize(iconSize.width() + kButtonPaddingPx,
-               iconSize.height() + kButtonPaddingPx);
+  setFixedSize(icon_size.width() + kButtonPaddingPx,
+               icon_size.height() + kButtonPaddingPx);
 }

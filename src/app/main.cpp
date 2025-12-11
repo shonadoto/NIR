@@ -1,9 +1,12 @@
 #include <execinfo.h>
+#include <spdlog/common.h>
+#include <spdlog/logger.h>
 #include <spdlog/sinks/basic_file_sink.h>
 #include <spdlog/sinks/stdout_color_sinks.h>
 #include <spdlog/spdlog.h>
 
 #include <QApplication>
+#include <QCoreApplication>
 #include <QDir>
 #include <QFileInfo>
 #include <QIcon>
@@ -12,7 +15,7 @@
 #include <array>
 #include <csignal>
 #include <cstdlib>
-#include <format>
+#include <memory>
 #include <vector>
 
 #include "ui/MainWindow.h"
@@ -53,21 +56,17 @@ auto CrashHandler(int sig) -> void {
   const size_t size = backtrace(array.data(), kMaxStackTraceFrames);
 
   LOG_CRITICAL() << "Stack trace (" << size << " frames):";
-  // NOLINTNEXTLINE(cppcoreguidelines-owning-memory,
   // bugprone-multi-level-implicit-pointer-conversion) backtrace_symbols is a C
   // library function that uses malloc and returns char** The conversion from
   // char** to void* is required by the C API
-  // NOLINTNEXTLINE(bugprone-multi-level-implicit-pointer-conversion)
-  void* messages_void = backtrace_symbols(array.data(), static_cast<int>(size));
-  // NOLINTNEXTLINE(bugprone-multi-level-implicit-pointer-conversion)
-  char** messages = static_cast<char**>(messages_void);
+  char** messages = backtrace_symbols(array.data(), static_cast<int>(size));
   if (messages != nullptr) {
     for (size_t i = 0; i < size; i++) {
       LOG_CRITICAL() << "  [" << i << "] "
                      << (messages[i] != nullptr ? messages[i] : "?");
     }
-    // NOLINTNEXTLINE(cppcoreguidelines-no-malloc,bugprone-multi-level-implicit-pointer-conversion)
-    free(messages);
+    free(reinterpret_cast<void*>(
+      messages));  // NOLINT(cppcoreguidelines-no-malloc,bugprone-multi-level-implicit-pointer-conversion)
   }
 
   spdlog::shutdown();
@@ -76,6 +75,7 @@ auto CrashHandler(int sig) -> void {
 
 auto SetupLogging() -> void {
   // Get log file path
+  // above
   QString app_name = QApplication::applicationName();
   if (app_name.isEmpty()) {
     app_name = "NIRMaterialEditor";
@@ -126,7 +126,6 @@ auto main(int argc, char* argv[]) -> int {
   std::signal(SIGBUS, CrashHandler);
 
   // QApplication cannot be const because exec() modifies internal state
-  // NOLINTNEXTLINE(misc-const-correctness)
   QApplication app(argc, argv);
   QApplication::setApplicationName("NIRMaterialEditor");
   QApplication::setWindowIcon(QIcon(":/icons/app.svg"));
@@ -140,8 +139,7 @@ auto main(int argc, char* argv[]) -> int {
   LOG_INFO() << "MainWindow shown, entering event loop";
 
   // app.exec() modifies internal state, so app cannot be const
-  // NOLINTNEXTLINE(readability-static-accessed-through-instance)
-  const int result = app.exec();
+  const int result = QApplication::exec();
 
   LOG_INFO() << "Application exiting with code: " << result;
   spdlog::shutdown();

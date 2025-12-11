@@ -1,6 +1,10 @@
 #include "ActivityBar.h"
 
+#include <QIcon>
+#include <QSizePolicy>
+#include <QString>
 #include <QVBoxLayout>
+#include <QWidget>
 
 #include "ActivityButton.h"
 
@@ -23,9 +27,8 @@ ActivityBar::ActivityBar(QWidget* parent)
 
 ActivityBar::~ActivityBar() = default;
 
-ActivityButton* ActivityBar::addToggleButton(const QIcon& icon,
-                                             const QString& text,
-                                             bool checked) {
+auto ActivityBar::addToggleButton(const QIcon& icon, const QString& text,
+                                  bool checked) -> ActivityButton* {
   // Qt uses parent-based ownership, not smart pointers
   auto* btn = new ActivityButton(this);
   btn->setToolTip(text);

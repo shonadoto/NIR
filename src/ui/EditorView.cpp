@@ -4,12 +4,19 @@
 
 #include <QGraphicsItem>
 #include <QGraphicsScene>
+#include <QGraphicsView>
+#include <QList>
 #include <QMouseEvent>
 #include <QPainter>
+#include <QPoint>
+#include <QRectF>
 #include <QScrollBar>
+#include <QWheelEvent>
+#include <QWidget>
 #include <QtGlobal>
 #include <QtMath>
 #include <algorithm>
+#include <cmath>  // For std::pow, std::abs
 
 #include "ui/editor/SubstrateItem.h"
 
@@ -49,8 +56,9 @@ void EditorView::fitToItem(const QGraphicsItem* item) {
   scale_ = transform().m11();
 }
 
-// NOLINTNEXTLINE(readability-function-cognitive-complexity)
-void EditorView::wheelEvent(QWheelEvent* event) {
+// necessary for wheel event handling with multiple modifiers
+void EditorView::wheelEvent(
+  QWheelEvent* event) {  // NOLINT(readability-function-cognitive-complexity)
   const QPoint num_degrees = event->angleDelta() / 8;
   if (num_degrees.y() == 0) {
     QGraphicsView::wheelEvent(event);
@@ -61,16 +69,16 @@ void EditorView::wheelEvent(QWheelEvent* event) {
   const auto mods = event->modifiers();
 
 #ifdef Q_OS_MACOS
-  const bool rotateMod = (mods & Qt::ControlModifier) != 0;  // Cmd
-  const bool scaleMod = (mods & Qt::AltModifier) != 0;       // Shift
+  const bool rotate_mod = (mods & Qt::ControlModifier) != 0;  // Cmd
+  const bool scale_mod = (mods & Qt::AltModifier) != 0;       // Shift
 #else
-  const bool rotateMod = (mods & Qt::ControlModifier) != 0;  // Ctrl
-  const bool scaleMod = (mods & Qt::MetaModifier) != 0;      // Shift
+  const bool rotate_mod = (mods & Qt::ControlModifier) != 0;  // Ctrl
+  const bool scale_mod = (mods & Qt::MetaModifier) != 0;      // Shift
 #endif
 
   // Transform selected items with modifiers (scale first to avoid conflict on
   // macOS)
-  if (scaleMod) {
+  if (scale_mod) {
     const qreal step = (num_steps > 0) ? std::pow(kScaleStep, num_steps)
                                        : std::pow(1.0 / kScaleStep, -num_steps);
     QList<QGraphicsItem*> targets = scene()->selectedItems();
@@ -91,14 +99,14 @@ void EditorView::wheelEvent(QWheelEvent* event) {
     }
     for (QGraphicsItem* item : targets) {
       item->setTransformOriginPoint(item->boundingRect().center());
-      const qreal newScale = std::clamp(item->scale() * step, 0.1, 10.0);
-      item->setScale(newScale);
+      const qreal new_scale = std::clamp(item->scale() * step, 0.1, 10.0);
+      item->setScale(new_scale);
     }
     event->accept();
     return;
   }
 
-  if (rotateMod) {
+  if (rotate_mod) {
     const qreal delta =
       (num_steps > 0 ? kRotateStepDeg : -kRotateStepDeg) * std::abs(num_steps);
     QList<QGraphicsItem*> targets = scene()->selectedItems();

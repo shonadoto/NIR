@@ -40,11 +40,11 @@ class ShapeModelBinder {
   };
 
   void handle_change(ISceneObject* item, const ModelChange& change);
-  void apply_name(ISceneObject* item, const std::string& name);
-  void apply_color(ISceneObject* item, const Color& color);
-  auto extract_color(const ISceneObject* item) const -> Color;
+  static void apply_name(ISceneObject* item, const std::string& name);
+  static void apply_color(ISceneObject* item, const Color& color);
+  static auto extract_color(const ISceneObject* item) -> Color;
   void update_material_binding(ISceneObject* item, Binding& binding);
-  void detach_material_binding(Binding& binding);
+  static void detach_material_binding(Binding& binding);
   void update_model_geometry(ISceneObject* item,
                              const std::shared_ptr<ShapeModel>& model);
   void apply_geometry(ISceneObject* item,
