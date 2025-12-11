@@ -7,23 +7,22 @@ class QGraphicsItem;
 
 class EditorView : public QGraphicsView {
   Q_OBJECT
-public:
-  explicit EditorView(QWidget *parent = nullptr);
+ public:
+  explicit EditorView(QWidget* parent = nullptr);
   ~EditorView() override;
 
-  void fitToItem(const QGraphicsItem *item);
+  void fitToItem(const QGraphicsItem* item);
 
-private:
-  void wheelEvent(QWheelEvent *event) override;
-  void mousePressEvent(QMouseEvent *event) override;
-  void mouseMoveEvent(QMouseEvent *event) override;
-  void mouseReleaseEvent(QMouseEvent *event) override;
+ private:
+  void wheelEvent(QWheelEvent* event) override;
+  void mousePressEvent(QMouseEvent* event) override;
+  void mouseMoveEvent(QMouseEvent* event) override;
+  void mouseReleaseEvent(QMouseEvent* event) override;
 
   void applyZoom(qreal factor);
 
-private:
-  QGraphicsScene *scene_ {nullptr};
-  bool panning_ {false};
+ private:
+  bool panning_{false};
   QPoint last_mouse_pos_;
-  qreal scale_ {1.0};
+  qreal scale_{1.0};
 };

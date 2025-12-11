@@ -1,52 +1,57 @@
 #include "ObjectsBar.h"
 
 #include <QEvent>
+#include <QGraphicsScene>
 #include <QItemSelectionModel>
 #include <QKeyEvent>
+#include <QModelIndex>
+#include <QPushButton>
+#include <QToolBar>
 #include <QTreeView>
 #include <QVBoxLayout>
-#include <QToolBar>
-#include <QPushButton>
-#include <QModelIndex>
-#include <QGraphicsScene>
 #include <algorithm>
 #include <memory>
 
+#include "commands/CommandManager.h"
+#include "commands/MaterialCommands.h"
+#include "commands/ShapeCommands.h"
+#include "model/DocumentModel.h"
 #include "model/ObjectTreeModel.h"
-#include "model/MaterialModel.h"
-#include "ui/editor/EditorArea.h"
-#include "scene/items/CircleItem.h"
-#include "scene/items/RectangleItem.h"
-#include "scene/items/EllipseItem.h"
-#include "scene/items/StickItem.h"
+#include "model/ShapeModel.h"
 #include "scene/ISceneObject.h"
+#include "scene/items/CircleItem.h"
 #include "ui/bindings/ShapeModelBinder.h"
+#include "ui/editor/EditorArea.h"
 
 namespace {
 
 constexpr int kMinObjectsBarWidthPx = 220;
 constexpr int kDefaultObjectsBarWidthPx = 280;
+constexpr int kToolbarButtonWidthPx = 30;
 
-} // namespace
+}  // namespace
 
-ObjectsBar::ObjectsBar(QWidget *parent) : QWidget(parent) {
-  auto *layout = new QVBoxLayout(this);
+ObjectsBar::ObjectsBar(QWidget* parent)
+    : QWidget(parent),
+      // Qt uses parent-based ownership, not smart pointers
+      tree_view_(new QTreeView(this)),
+      preferred_width_(kDefaultObjectsBarWidthPx),
+      last_visible_width_(0) {
+  auto* layout = new QVBoxLayout(this);
   layout->setContentsMargins(0, 0, 0, 0);
   layout->setSpacing(0);
 
   setup_toolbar();
   layout->addWidget(toolbar_);
 
-  tree_view_ = new QTreeView(this);
   layout->addWidget(tree_view_);
   tree_view_->setHeaderHidden(true);
+  // header
   tree_view_->setEditTriggers(QAbstractItemView::EditKeyPressed |
                               QAbstractItemView::SelectedClicked |
                               QAbstractItemView::DoubleClicked);
   tree_view_->setExpandsOnDoubleClick(false);
 
-  preferred_width_ = kDefaultObjectsBarWidthPx;
-  last_visible_width_ = 0;
   setMinimumWidth(kMinObjectsBarWidthPx);
   setFixedWidth(preferred_width_);
 }
@@ -55,47 +60,60 @@ void ObjectsBar::setup_toolbar() {
   toolbar_ = new QToolBar(this);
   toolbar_->setMovable(false);
   toolbar_->setFloatable(false);
+  // namespace
   toolbar_->setToolButtonStyle(Qt::ToolButtonTextBesideIcon);
 
   add_btn_ = new QPushButton("+", this);
   add_btn_->setToolTip("Add new item or material preset");
-  add_btn_->setMaximumWidth(30);
-  connect(add_btn_, &QPushButton::clicked, this, &ObjectsBar::add_item_or_preset);
+  add_btn_->setMaximumWidth(kToolbarButtonWidthPx);
+  connect(add_btn_, &QPushButton::clicked, this,
+          &ObjectsBar::add_item_or_preset);
   toolbar_->addWidget(add_btn_);
 
   remove_btn_ = new QPushButton("−", this);
   remove_btn_->setToolTip("Remove selected item or material preset");
-  remove_btn_->setMaximumWidth(30);
-  connect(remove_btn_, &QPushButton::clicked, this, &ObjectsBar::remove_selected_item);
+  remove_btn_->setMaximumWidth(kToolbarButtonWidthPx);
+  connect(remove_btn_, &QPushButton::clicked, this,
+          &ObjectsBar::remove_selected_item);
   toolbar_->addWidget(remove_btn_);
 }
 
-void ObjectsBar::set_editor_area(EditorArea *editor_area) {
+void ObjectsBar::set_editor_area(EditorArea* editor_area) {
   editor_area_ = editor_area;
 }
 
-void ObjectsBar::set_shape_binder(ShapeModelBinder *binder) {
+void ObjectsBar::set_shape_binder(ShapeModelBinder* binder) {
   shape_binder_ = binder;
 }
 
+void ObjectsBar::set_command_manager(CommandManager* command_manager) {
+  command_manager_ = command_manager;
+}
+
+void ObjectsBar::set_document_model(DocumentModel* document_model) {
+  document_model_ = document_model;
+}
+
 void ObjectsBar::add_item_or_preset() {
-  if (!tree_view_->model()) {
+  if (tree_view_->model() == nullptr) {
     return;
   }
 
-  auto *model = qobject_cast<ObjectTreeModel*>(tree_view_->model());
-  if (!model) {
+  auto* model = qobject_cast<ObjectTreeModel*>(
+    tree_view_
+      ->model());  // NOLINT(misc-include-cleaner) qobject_cast is a Qt macro
+  if (model == nullptr) {
     return;
   }
 
-  if (auto *sel = tree_view_->selectionModel()) {
-    QModelIndex current = sel->currentIndex();
-    QModelIndex root;
-    QModelIndex inclusionsIdx = model->index(0, 0, root);
-    QModelIndex materialsIdx = model->index(1, 0, root);
+  if (auto* sel = tree_view_->selectionModel()) {
+    const QModelIndex current = sel->currentIndex();
+    const QModelIndex root;
+    const QModelIndex inclusions_idx = model->index(0, 0, root);
+    const QModelIndex materials_idx = model->index(1, 0, root);
 
-    bool isInclusionsContext = false;
-    bool isMaterialsContext = false;
+    bool is_inclusions_context = false;
+    bool is_materials_context = false;
 
     if (current.isValid()) {
       // Check if current selection is under Inclusions or Materials
@@ -103,97 +121,168 @@ void ObjectsBar::add_item_or_preset() {
       while (ancestor.isValid() && ancestor.parent().isValid()) {
         ancestor = ancestor.parent();
       }
-      if (ancestor == inclusionsIdx) {
-        isInclusionsContext = true;
-      } else if (ancestor == materialsIdx) {
-        isMaterialsContext = true;
+      if (ancestor == inclusions_idx) {
+        is_inclusions_context = true;
+      } else if (ancestor == materials_idx) {
+        is_materials_context = true;
       } else if (ancestor == root || !ancestor.isValid()) {
         // If selected root or nothing, check which group node is selected
-        if (current == inclusionsIdx) {
-          isInclusionsContext = true;
-        } else if (current == materialsIdx) {
-          isMaterialsContext = true;
-        } else {
-          // Default to Inclusions if nothing clear
-          isInclusionsContext = true;
+        if (current == inclusions_idx) {
+          is_inclusions_context = true;
+        } else if (current == materials_idx) {
+          is_materials_context = true;
         }
+        // Default to Inclusions if nothing clear (handled below)
       }
     } else {
       // If nothing selected, default to Inclusions
-      isInclusionsContext = true;
+      is_inclusions_context = true;
     }
 
     // If context is Inclusions, add a circle (default shape)
-    if (isInclusionsContext) {
-      if (!editor_area_) {
+    if (is_inclusions_context) {
+      if (editor_area_ == nullptr || document_model_ == nullptr ||
+          shape_binder_ == nullptr) {
         return;
       }
-      auto *scene = editor_area_->scene();
-      if (!scene) {
-        return;
-      }
-      const QPointF c = editor_area_->substrate_center();
-      auto *circle = new CircleItem(40);
-      scene->addItem(circle);
-      circle->setPos(c);
-      std::shared_ptr<ShapeModel> shapeModel;
-      if (shape_binder_) {
-        shapeModel = shape_binder_->bind_shape(circle);
-      }
-      // Select the new item
-      if (shapeModel) {
-        QModelIndex itemIdx = model->index_from_shape(shapeModel);
-        if (itemIdx.isValid()) {
-          tree_view_->selectionModel()->setCurrentIndex(itemIdx, QItemSelectionModel::ClearAndSelect);
-          tree_view_->edit(itemIdx); // Start editing name
+      // Use command to create shape
+      if (command_manager_ != nullptr) {
+        auto cmd = std::make_unique<CreateShapeCommand>(
+          document_model_, shape_binder_, editor_area_,
+          ShapeModel::ShapeType::Circle);
+        if (command_manager_->execute(std::move(cmd))) {
+          // Find and select the newly created shape
+          const auto& shapes = document_model_->shapes();
+          if (!shapes.empty()) {
+            const auto& new_shape = shapes.back();
+            const QModelIndex item_idx = model->index_from_shape(new_shape);
+            if (item_idx.isValid()) {
+              tree_view_->selectionModel()->setCurrentIndex(
+                item_idx, QItemSelectionModel::ClearAndSelect);
+              tree_view_->edit(item_idx);  // Start editing name
+            }
+          }
+        }
+      } else {
+        // Fallback to old method if command manager not available
+        auto* scene = editor_area_->scene();
+        if (scene == nullptr) {
+          return;
+        }
+        constexpr double kDefaultNewCircleRadius = 40.0;
+        const QPointF center = editor_area_->substrate_center();
+        auto* circle = new CircleItem(kDefaultNewCircleRadius);
+        scene->addItem(circle);
+        circle->setPos(center);
+        std::shared_ptr<ShapeModel> shape_model;
+        if (shape_binder_ != nullptr) {
+          shape_model = shape_binder_->bind_shape(circle);
+        }
+        // Select the new item
+        if (shape_model) {
+          const QModelIndex item_idx = model->index_from_shape(shape_model);
+          if (item_idx.isValid()) {
+            tree_view_->selectionModel()->setCurrentIndex(
+              item_idx, QItemSelectionModel::ClearAndSelect);
+            tree_view_->edit(item_idx);  // Start editing name
+          }
         }
       }
-    } else if (isMaterialsContext) {
-      auto material = model->create_material(QStringLiteral("New Material"));
-      tree_view_->expand(materialsIdx);
-      QModelIndex materialIdx = model->index_from_material(material);
-      if (materialIdx.isValid()) {
-        tree_view_->selectionModel()->setCurrentIndex(materialIdx, QItemSelectionModel::ClearAndSelect);
-        tree_view_->edit(materialIdx);
+    } else if (is_materials_context) {
+      if (document_model_ == nullptr) {
+        return;
+      }
+      // Use command to create material
+      if (command_manager_ != nullptr) {
+        auto cmd = std::make_unique<CreateMaterialCommand>(
+          document_model_, Color{}, "New Material");
+        if (command_manager_->execute(std::move(cmd))) {
+          // Find and select the newly created material
+          const auto& materials = document_model_->materials();
+          if (!materials.empty()) {
+            const auto& new_material = materials.back();
+            tree_view_->expand(materials_idx);
+            const QModelIndex material_idx =
+              model->index_from_material(new_material);
+            if (material_idx.isValid()) {
+              tree_view_->selectionModel()->setCurrentIndex(
+                material_idx, QItemSelectionModel::ClearAndSelect);
+              tree_view_->edit(material_idx);
+            }
+          }
+        }
+      } else {
+        // Fallback to old method
+        auto material = model->create_material(QStringLiteral("New Material"));
+        tree_view_->expand(materials_idx);
+        const QModelIndex material_idx = model->index_from_material(material);
+        if (material_idx.isValid()) {
+          tree_view_->selectionModel()->setCurrentIndex(
+            material_idx, QItemSelectionModel::ClearAndSelect);
+          tree_view_->edit(material_idx);
+        }
       }
     }
   }
 }
 
 void ObjectsBar::remove_selected_item() {
-  if (!tree_view_->model()) {
+  if (tree_view_->model() == nullptr) {
     return;
   }
 
-  auto *model = qobject_cast<ObjectTreeModel*>(tree_view_->model());
-  if (!model) {
+  auto* model = qobject_cast<ObjectTreeModel*>(
+    tree_view_
+      ->model());  // NOLINT(misc-include-cleaner) qobject_cast is a Qt macro
+  if (model == nullptr) {
     return;
   }
 
-  if (auto *sel = tree_view_->selectionModel()) {
-    QModelIndex current = sel->currentIndex();
+  if (auto* sel = tree_view_->selectionModel()) {
+    const QModelIndex current = sel->currentIndex();
     if (!current.isValid()) {
       return;
     }
 
     // Check if it's a material preset
     auto material = model->material_from_index(current);
-    if (material) {
-      model->remove_material(material);
+    if (material != nullptr) {
+      if (command_manager_ != nullptr && document_model_ != nullptr) {
+        // Use command to delete material
+        auto cmd =
+          std::make_unique<DeleteMaterialCommand>(document_model_, material);
+        command_manager_->execute(std::move(cmd));
+      } else {
+        // Fallback to old method
+        model->remove_material(material);
+      }
       return;
     }
 
     // Otherwise it's an inclusion item
     auto shape = model->shape_from_index(current);
-    if (shape) {
-      if (shape_binder_) {
-        if (auto *item = shape_binder_->item_for(shape)) {
-          shape_binder_->unbind_shape(dynamic_cast<ISceneObject*>(item));
+    if (shape != nullptr) {
+      if (command_manager_ != nullptr && document_model_ != nullptr &&
+          shape_binder_ != nullptr && editor_area_ != nullptr) {
+        // Use command to delete shape
+        auto cmd = std::make_unique<DeleteShapeCommand>(
+          document_model_, shape_binder_, editor_area_, shape);
+        command_manager_->execute(std::move(cmd));
+      } else if (shape_binder_ != nullptr) {
+        // Fallback to old method
+        if (auto* item = shape_binder_->item_for(shape)) {
+          // Convert to ISceneObject and unbind
+          // unbind_shape will safely handle invalid items (including those not
+          // in scene)
+          auto* scene_obj = dynamic_cast<ISceneObject*>(item);
+          if (scene_obj != nullptr) {
+            shape_binder_->unbind_shape(scene_obj);
+          }
         }
-      }
-      QModelIndex parent = current.parent();
-      if (parent.isValid()) {
-        model->removeRow(current.row(), parent);
+        const QModelIndex parent = current.parent();
+        if (parent.isValid()) {
+          model->removeRow(current.row(), parent);
+        }
       }
     }
   }
@@ -201,7 +290,7 @@ void ObjectsBar::remove_selected_item() {
 
 void ObjectsBar::update_button_states() {
   // Enable/disable buttons based on selection
-  if (!tree_view_->model()) {
+  if (tree_view_->model() == nullptr) {
     add_btn_->setEnabled(false);
     remove_btn_->setEnabled(false);
     return;
@@ -209,8 +298,8 @@ void ObjectsBar::update_button_states() {
 
   add_btn_->setEnabled(true);
 
-  if (auto *sel = tree_view_->selectionModel()) {
-    QModelIndex current = sel->currentIndex();
+  if (auto* sel = tree_view_->selectionModel()) {
+    const QModelIndex current = sel->currentIndex();
     // Enable remove button only if a deletable item is selected
     remove_btn_->setEnabled(current.isValid() && current.parent().isValid());
   } else {
@@ -220,72 +309,86 @@ void ObjectsBar::update_button_states() {
 
 ObjectsBar::~ObjectsBar() = default;
 
-void ObjectsBar::setPreferredWidth(int w) {
-  preferred_width_ = w;
+void ObjectsBar::setPreferredWidth(int width) {
+  preferred_width_ = width;
   setFixedWidth(preferred_width_);
 }
 
-void ObjectsBar::hideEvent(QHideEvent *event) {
+void ObjectsBar::hideEvent(QHideEvent* event) {
   last_visible_width_ = width();
   QWidget::hideEvent(event);
 }
 
-void ObjectsBar::showEvent(QShowEvent *event) {
+void ObjectsBar::showEvent(QShowEvent* event) {
   const int target =
-      last_visible_width_ > 0 ? last_visible_width_ : preferred_width_;
+    last_visible_width_ > 0 ? last_visible_width_ : preferred_width_;
   setFixedWidth(target);
   QWidget::showEvent(event);
 }
 
-void ObjectsBar::set_model(QAbstractItemModel *model) {
+// header
+void ObjectsBar::set_model(QAbstractItemModel* model) {
   tree_view_->setModel(model);
   tree_view_->installEventFilter(this);
   // Expand root children by default
-  if (model) {
-    QModelIndex root;
+  if (model != nullptr) {
+    const QModelIndex root;
     for (int i = 0; i < model->rowCount(root); ++i) {
-      QModelIndex child = model->index(i, 0, root);
+      const QModelIndex child = model->index(i, 0, root);
       if (child.isValid()) {
         tree_view_->expand(child);
       }
     }
     // Connect selection changes to update button states
-    if (auto *sel = tree_view_->selectionModel()) {
-      connect(sel, &QItemSelectionModel::selectionChanged, this, &ObjectsBar::update_button_states);
-      connect(sel, &QItemSelectionModel::currentChanged, this, &ObjectsBar::update_button_states);
+    if (auto* sel = tree_view_->selectionModel()) {
+      connect(sel, &QItemSelectionModel::selectionChanged, this,
+              &ObjectsBar::update_button_states);
+      connect(sel, &QItemSelectionModel::currentChanged, this,
+              &ObjectsBar::update_button_states);
     }
   }
   update_button_states();
 }
 
-bool ObjectsBar::eventFilter(QObject *obj, QEvent *event) {
+// necessary for event filtering NOLINTNEXTLINE(misc-include-cleaner) QObject
+// and QEvent are in Qt headers
+auto ObjectsBar::eventFilter(QObject* obj, QEvent* event)
+  -> bool {  // NOLINT(readability-function-cognitive-complexity)
   if (obj == tree_view_) {
     if (event->type() == QEvent::KeyPress) {
-      auto *ke = static_cast<QKeyEvent *>(event);
-      if (ke->isAutoRepeat()) {
-        return false; // ignore auto-repeat to prevent deleting multiple items
-                      // unintentionally
+      // QKeyEvent is not polymorphic, static_cast is safe here
+      auto* key_event = static_cast<QKeyEvent*>(event);
+      if (key_event->isAutoRepeat()) {
+        return false;  // ignore auto-repeat to prevent deleting multiple items
+                       // unintentionally
       }
-      if (ke->key() == Qt::Key_Delete || ke->key() == Qt::Key_Backspace) {
-        if (auto *m = tree_view_->model()) {
-          if (auto *sel = tree_view_->selectionModel()) {
+      // Qt::Key_Backspace are in Qt namespace
+      if (key_event->key() == Qt::Key_Delete ||  // NOLINT(misc-include-cleaner)
+          key_event->key() ==
+            Qt::Key_Backspace) {  // NOLINT(misc-include-cleaner)
+        if (auto* model = tree_view_->model()) {
+          if (auto* sel = tree_view_->selectionModel()) {
             // Delete all selected rows (column 0) from bottom to top
             QList<QModelIndex> rows = sel->selectedRows(0);
-            std::sort(rows.begin(), rows.end(),
-                      [](const QModelIndex &a, const QModelIndex &b) {
-                        return a.row() > b.row();
-                      });
-            bool anyRemoved = false;
-            for (const QModelIndex &idx : rows) {
-              if (!idx.isValid())
+            std::sort(
+              rows.begin(), rows.end(),
+              [](const QModelIndex& index_a, const QModelIndex& index_b) {
+                return index_a.row() > index_b.row();
+              });
+            bool any_removed = false;
+            for (const QModelIndex& idx : rows) {
+              if (!idx.isValid()) {
                 continue;
-              // Skip group nodes (Inclusions, Materials) - they cannot be deleted
-              if (!idx.parent().isValid())
+              }
+              // Skip group nodes (Inclusions, Materials) - they cannot be
+              // deleted
+              if (!idx.parent().isValid()) {
                 continue;
-              anyRemoved |= m->removeRow(idx.row(), idx.parent());
+              }
+              any_removed |= model->removeRow(idx.row(), idx.parent());
             }
-            if (anyRemoved) {
-              return true; // handled
+            if (any_removed) {
+              return true;  // handled
             }
           }
         }

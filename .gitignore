@@ -24,3 +24,5 @@ compile_commands.json
 *.swo
 *.bak
 *.tmp
+format.sh
+lint.sh
