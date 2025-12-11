@@ -24,21 +24,15 @@ constexpr double kRotationSpinStep = 5.0;
 }  // namespace
 
 StickItem::StickItem(const QLineF& line, QGraphicsItem* parent)
-    : QGraphicsLineItem(line, parent) {
+    : BaseShapeItem<QGraphicsLineItem>(line, parent) {
   setFlags(QGraphicsItem::ItemIsSelectable | QGraphicsItem::ItemIsMovable |
            QGraphicsItem::ItemSendsGeometryChanges);
   QPen pen_item(Qt::black);
   pen_item.setWidthF(kDefaultPenWidth);
   setPen(pen_item);
   setTransformOriginPoint(boundingRect().center());
-}
-
-void StickItem::set_name(const QString& name) {
-  const QString trimmed = name.trimmed();
-  if (trimmed.isEmpty() || trimmed == name_) {
-    return;
-  }
-  name_ = trimmed;
+  // Set default name
+  set_name("Stick");
 }
 
 QWidget* StickItem::create_properties_widget(QWidget* parent) {
@@ -95,7 +89,7 @@ QWidget* StickItem::create_properties_widget(QWidget* parent) {
 QJsonObject StickItem::to_json() const {
   QJsonObject obj;
   obj["type"] = type_name();
-  obj["name"] = name_;
+  obj["name"] = name();
   obj["position"] = QJsonArray{pos().x(), pos().y()};
   obj["rotation"] = rotation();
   const QLineF line_item = line();
@@ -114,16 +108,16 @@ void StickItem::from_json(const QJsonObject& json) {
   if (json.contains("name")) {
     const QString name = json["name"].toString();
     if (!name.isEmpty()) {
-      name_ = name;
+      set_name(name);
     }
   }
   if (json.contains("position")) {
     QJsonArray position_array = json["position"].toArray();
     if (position_array.size() >= 2) {
-      const double x = position_array[0].toDouble();
-      const double y = position_array[1].toDouble();
-      if (std::isfinite(x) && std::isfinite(y)) {
-        setPos(x, y);
+      const double pos_x = position_array[0].toDouble();
+      const double pos_y = position_array[1].toDouble();
+      if (std::isfinite(pos_x) && std::isfinite(pos_y)) {
+        setPos(pos_x, pos_y);
       }
     }
   }
@@ -137,13 +131,13 @@ void StickItem::from_json(const QJsonObject& json) {
     QJsonObject line_obj = json["line"].toObject();
     if (line_obj.contains("x1") && line_obj.contains("y1") &&
         line_obj.contains("x2") && line_obj.contains("y2")) {
-      const double x1 = line_obj["x1"].toDouble();
-      const double y1 = line_obj["y1"].toDouble();
-      const double x2 = line_obj["x2"].toDouble();
-      const double y2 = line_obj["y2"].toDouble();
-      if (std::isfinite(x1) && std::isfinite(y1) && std::isfinite(x2) &&
-          std::isfinite(y2)) {
-        setLine(QLineF(x1, y1, x2, y2));
+      const double line_x1 = line_obj["x1"].toDouble();
+      const double line_y1 = line_obj["y1"].toDouble();
+      const double line_x2 = line_obj["x2"].toDouble();
+      const double line_y2 = line_obj["y2"].toDouble();
+      if (std::isfinite(line_x1) && std::isfinite(line_y1) &&
+          std::isfinite(line_x2) && std::isfinite(line_y2)) {
+        setLine(QLineF(line_x1, line_y1, line_x2, line_y2));
         setTransformOriginPoint(boundingRect().center());
       }
     }
@@ -151,15 +145,17 @@ void StickItem::from_json(const QJsonObject& json) {
   if (json.contains("pen_color")) {
     QJsonArray color_array = json["pen_color"].toArray();
     if (color_array.size() >= 4) {
-      const int r = color_array[0].toInt();
-      const int g = color_array[1].toInt();
-      const int b = color_array[2].toInt();
-      const int a = color_array[3].toInt();
+      constexpr int kMaxColorValue = 255;
+      const int red = color_array[0].toInt();
+      const int green = color_array[1].toInt();
+      const int blue = color_array[2].toInt();
+      const int alpha = color_array[3].toInt();
       // Validate color values are in valid range [0, 255]
-      if (r >= 0 && r <= 255 && g >= 0 && g <= 255 && b >= 0 && b <= 255 &&
-          a >= 0 && a <= 255) {
+      if (red >= 0 && red <= kMaxColorValue && green >= 0 &&
+          green <= kMaxColorValue && blue >= 0 && blue <= kMaxColorValue &&
+          alpha >= 0 && alpha <= kMaxColorValue) {
         QPen pen_item = pen();
-        pen_item.setColor(QColor(r, g, b, a));
+        pen_item.setColor(QColor(red, green, blue, alpha));
         if (json.contains("pen_width")) {
           const double width = json["pen_width"].toDouble();
           if (std::isfinite(width) && width > 0.0) {
@@ -172,24 +168,8 @@ void StickItem::from_json(const QJsonObject& json) {
   }
 }
 
-void StickItem::set_geometry_changed_callback(std::function<void()> callback) {
-  geometry_changed_callback_ = std::move(callback);
-}
-
-void StickItem::clear_geometry_changed_callback() {
-  geometry_changed_callback_ = nullptr;
-}
-
-void StickItem::notify_geometry_changed() const {
-  if (geometry_changed_callback_) {
-    geometry_changed_callback_();
-  }
-}
-
-void StickItem::set_material_model(MaterialModel* material) {
-  // Stick items don't use grid, but we need to implement the interface
-  (void)material;
-}
+// set_geometry_changed_callback, clear_geometry_changed_callback,
+// notify_geometry_changed, set_material_model are now in BaseShapeItem
 
 QRectF StickItem::boundingRect() const {
   // Return bounding rect that includes only the line with pen width
@@ -217,9 +197,6 @@ void StickItem::paint(QPainter* painter, const QStyleOptionGraphicsItem* option,
 
 QVariant StickItem::itemChange(GraphicsItemChange change,
                                const QVariant& value) {
-  if (change == ItemPositionHasChanged || change == ItemRotationHasChanged ||
-      change == ItemTransformHasChanged) {
-    notify_geometry_changed();
-  }
+  handle_geometry_change(change);
   return QGraphicsLineItem::itemChange(change, value);
 }

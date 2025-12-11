@@ -4,6 +4,7 @@
 #include <QJsonArray>
 #include <QJsonDocument>
 #include <QJsonObject>
+#include <algorithm>
 #include <cmath>
 #include <memory>
 #include <unordered_map>
@@ -53,10 +54,16 @@ QJsonArray color_to_json(const Color& color) {
 Color color_from_json(const QJsonArray& array) {
   Color color;
   if (array.size() == 4) {
-    color.r = static_cast<uint8_t>(array[0].toInt());
-    color.g = static_cast<uint8_t>(array[1].toInt());
-    color.b = static_cast<uint8_t>(array[2].toInt());
-    color.a = static_cast<uint8_t>(array[3].toInt());
+    // Clamp values to valid range [0, 255]
+    constexpr int kMaxColorValue = 255;
+    const int red = std::clamp(array[0].toInt(), 0, kMaxColorValue);
+    const int green = std::clamp(array[1].toInt(), 0, kMaxColorValue);
+    const int blue = std::clamp(array[2].toInt(), 0, kMaxColorValue);
+    const int alpha = std::clamp(array[3].toInt(), 0, kMaxColorValue);
+    color.r = static_cast<uint8_t>(red);
+    color.g = static_cast<uint8_t>(green);
+    color.b = static_cast<uint8_t>(blue);
+    color.a = static_cast<uint8_t>(alpha);
   }
   return color;
 }
@@ -67,8 +74,14 @@ QJsonObject point_to_json(const Point2D& point) {
 
 Point2D point_from_json(const QJsonObject& object) {
   Point2D point;
-  point.x = object["x"].toDouble();
-  point.y = object["y"].toDouble();
+  const double pos_x = object["x"].toDouble();
+  const double pos_y = object["y"].toDouble();
+  // Validate values are not NaN or Infinity
+  if (std::isfinite(pos_x) && std::isfinite(pos_y)) {
+    point.x = pos_x;
+    point.y = pos_y;
+  }
+  // Otherwise point remains {0, 0}
   return point;
 }
 
@@ -78,8 +91,15 @@ QJsonObject size_to_json(const Size2D& size) {
 
 Size2D size_from_json(const QJsonObject& object) {
   Size2D size;
-  size.width = object["width"].toDouble();
-  size.height = object["height"].toDouble();
+  const double width = object["width"].toDouble();
+  const double height = object["height"].toDouble();
+  // Validate values are not NaN or Infinity, and are non-negative
+  if (std::isfinite(width) && width >= 0.0 && std::isfinite(height) &&
+      height >= 0.0) {
+    size.width = width;
+    size.height = height;
+  }
+  // Otherwise size remains {0, 0}
   return size;
 }
 
@@ -90,7 +110,11 @@ Point2D position_from_value(const QJsonValue& value) {
   if (value.isArray()) {
     QJsonArray arr = value.toArray();
     if (arr.size() >= 2) {
-      return Point2D{arr[0].toDouble(), arr[1].toDouble()};
+      const double pos_x = arr[0].toDouble();
+      const double pos_y = arr[1].toDouble();
+      if (std::isfinite(pos_x) && std::isfinite(pos_y)) {
+        return Point2D{pos_x, pos_y};
+      }
     }
   }
   return Point2D{};
@@ -101,24 +125,44 @@ Size2D size_from_value(const QJsonObject& object, ShapeModel::ShapeType type) {
     return size_from_json(object["size"].toObject());
   }
   if (object.contains("width") && object.contains("height")) {
-    return Size2D{object["width"].toDouble(), object["height"].toDouble()};
+    const double width = object["width"].toDouble();
+    const double height = object["height"].toDouble();
+    if (std::isfinite(width) && width > 0.0 && std::isfinite(height) &&
+        height > 0.0) {
+      return Size2D{width, height};
+    }
   }
   if (type == ShapeModel::ShapeType::Circle && object.contains("radius")) {
     constexpr double kRadiusToDiameterMultiplier = 2.0;
     const double radius = object["radius"].toDouble();
-    const double diameter = radius * kRadiusToDiameterMultiplier;
-    return Size2D{diameter, diameter};
+    if (std::isfinite(radius) && radius > 0.0) {
+      const double diameter = radius * kRadiusToDiameterMultiplier;
+      if (std::isfinite(diameter)) {
+        return Size2D{diameter, diameter};
+      }
+    }
   }
   if (type == ShapeModel::ShapeType::Stick && object.contains("line")) {
     constexpr double kDefaultPenWidth = 2.0;
     QJsonObject line = object["line"].toObject();
-    const double delta_x = line["x2"].toDouble() - line["x1"].toDouble();
-    const double delta_y = line["y2"].toDouble() - line["y1"].toDouble();
-    const double length = std::sqrt(delta_x * delta_x + delta_y * delta_y);
-    const double width = object.contains("pen_width")
-                           ? object["pen_width"].toDouble()
-                           : kDefaultPenWidth;
-    return Size2D{length, width};
+    const double line_x1 = line["x1"].toDouble();
+    const double line_y1 = line["y1"].toDouble();
+    const double line_x2 = line["x2"].toDouble();
+    const double line_y2 = line["y2"].toDouble();
+    if (std::isfinite(line_x1) && std::isfinite(line_y1) &&
+        std::isfinite(line_x2) && std::isfinite(line_y2)) {
+      const double delta_x = line_x2 - line_x1;
+      const double delta_y = line_y2 - line_y1;
+      const double length = std::sqrt(delta_x * delta_x + delta_y * delta_y);
+      if (std::isfinite(length) && length > 0.0) {
+        const double width = object.contains("pen_width")
+                               ? object["pen_width"].toDouble()
+                               : kDefaultPenWidth;
+        if (std::isfinite(width) && width > 0.0) {
+          return Size2D{length, width};
+        }
+      }
+    }
   }
   return Size2D{100.0, 100.0};
 }
@@ -258,11 +302,18 @@ bool ProjectSerializer::load_from_file(const QString& filename,
                           .toString(QStringLiteral("Substrate"))
                           .toStdString());
     if (substrate_obj.contains("size")) {
-      substrate->set_size(size_from_json(substrate_obj["size"].toObject()));
+      const Size2D size = size_from_json(substrate_obj["size"].toObject());
+      if (size.width > 0.0 && size.height > 0.0) {
+        substrate->set_size(size);
+      }
     } else if (substrate_obj.contains("width") &&
                substrate_obj.contains("height")) {
-      substrate->set_size(Size2D{substrate_obj["width"].toDouble(),
-                                 substrate_obj["height"].toDouble()});
+      const double width = substrate_obj["width"].toDouble();
+      const double height = substrate_obj["height"].toDouble();
+      if (std::isfinite(width) && width > 0.0 && std::isfinite(height) &&
+          height > 0.0) {
+        substrate->set_size(Size2D{width, height});
+      }
     }
     if (substrate_obj.contains("color")) {
       substrate->set_color(color_from_json(substrate_obj["color"].toArray()));
@@ -303,15 +354,22 @@ bool ProjectSerializer::load_from_file(const QString& filename,
     // compatibility)
     if (material_obj.contains("grid_frequency_x") &&
         material_obj.contains("grid_frequency_y")) {
-      material->set_grid_frequency_x(
-        material_obj["grid_frequency_x"].toDouble());
-      material->set_grid_frequency_y(
-        material_obj["grid_frequency_y"].toDouble());
+      const double freq_x = material_obj["grid_frequency_x"].toDouble();
+      const double freq_y = material_obj["grid_frequency_y"].toDouble();
+      // Validate values are finite and positive
+      if (std::isfinite(freq_x) && freq_x > 0.0) {
+        material->set_grid_frequency_x(freq_x);
+      }
+      if (std::isfinite(freq_y) && freq_y > 0.0) {
+        material->set_grid_frequency_y(freq_y);
+      }
     } else if (material_obj.contains("grid_frequency")) {
       // Backward compatibility: use old single value for both x and y
       const double freq = material_obj["grid_frequency"].toDouble();
-      material->set_grid_frequency_x(freq);
-      material->set_grid_frequency_y(freq);
+      if (std::isfinite(freq) && freq > 0.0) {
+        material->set_grid_frequency_x(freq);
+        material->set_grid_frequency_y(freq);
+      }
     }
 
     materials_by_name.emplace(name.toStdString(), material);
@@ -327,11 +385,20 @@ bool ProjectSerializer::load_from_file(const QString& filename,
       auto shape = document->create_shape(type, name.toStdString());
 
       if (obj.contains("position")) {
-        shape->set_position(position_from_value(obj["position"]));
+        const Point2D pos = position_from_value(obj["position"]);
+        if (std::isfinite(pos.x) && std::isfinite(pos.y)) {
+          shape->set_position(pos);
+        }
       }
-      shape->set_size(size_from_value(obj, type));
+      const Size2D size = size_from_value(obj, type);
+      if (size.width > 0.0 && size.height > 0.0) {
+        shape->set_size(size);
+      }
       if (obj.contains("rotation")) {
-        shape->set_rotation_deg(obj["rotation"].toDouble());
+        const double rotation = obj["rotation"].toDouble();
+        if (std::isfinite(rotation)) {
+          shape->set_rotation_deg(rotation);
+        }
       }
       const QString mode =
         obj["material_mode"].toString(QStringLiteral("custom"));
@@ -347,35 +414,47 @@ bool ProjectSerializer::load_from_file(const QString& filename,
       } else {
         // Custom material
         shape->clear_material();
-        if (obj.contains("custom_color") || obj.contains("fill_color")) {
-          shape->material()->set_color(custom_color_from_object(obj));
-        }
-        // Load grid settings
-        if (obj.contains("grid_type")) {
-          const int grid_type_value = obj["grid_type"].toInt();
-          // Handle backward compatibility: old Radial (1) becomes Internal (1)
-          // None = 0, Internal = 1 (Radial was also 1, so it maps correctly)
-          auto grid_type =
-            static_cast<MaterialModel::GridType>(grid_type_value);
-          // Ensure only valid values (0 or 1)
-          if (grid_type_value > 1) {
-            grid_type = MaterialModel::GridType::None;
+        // clear_material() creates a new material, so material() should not be
+        // nullptr but check for safety
+        if (auto* material = shape->material().get()) {
+          if (obj.contains("custom_color") || obj.contains("fill_color")) {
+            material->set_color(custom_color_from_object(obj));
           }
-          shape->material()->set_grid_type(grid_type);
-        }
-        // Load grid frequency (new format with x and y, or old format for
-        // backward compatibility)
-        if (obj.contains("grid_frequency_x") &&
-            obj.contains("grid_frequency_y")) {
-          shape->material()->set_grid_frequency_x(
-            obj["grid_frequency_x"].toDouble());
-          shape->material()->set_grid_frequency_y(
-            obj["grid_frequency_y"].toDouble());
-        } else if (obj.contains("grid_frequency")) {
-          // Backward compatibility: use old single value for both x and y
-          const double freq = obj["grid_frequency"].toDouble();
-          shape->material()->set_grid_frequency_x(freq);
-          shape->material()->set_grid_frequency_y(freq);
+          // Load grid settings
+          if (obj.contains("grid_type")) {
+            const int grid_type_value = obj["grid_type"].toInt();
+            // Handle backward compatibility: old Radial (1) becomes Internal
+            // (1) None = 0, Internal = 1 (Radial was also 1, so it maps
+            // correctly)
+            auto grid_type =
+              static_cast<MaterialModel::GridType>(grid_type_value);
+            // Ensure only valid values (0 or 1)
+            if (grid_type_value > 1) {
+              grid_type = MaterialModel::GridType::None;
+            }
+            material->set_grid_type(grid_type);
+          }
+          // Load grid frequency (new format with x and y, or old format for
+          // backward compatibility)
+          if (obj.contains("grid_frequency_x") &&
+              obj.contains("grid_frequency_y")) {
+            const double freq_x = obj["grid_frequency_x"].toDouble();
+            const double freq_y = obj["grid_frequency_y"].toDouble();
+            // Validate values are finite and positive
+            if (std::isfinite(freq_x) && freq_x > 0.0) {
+              material->set_grid_frequency_x(freq_x);
+            }
+            if (std::isfinite(freq_y) && freq_y > 0.0) {
+              material->set_grid_frequency_y(freq_y);
+            }
+          } else if (obj.contains("grid_frequency")) {
+            // Backward compatibility: use old single value for both x and y
+            const double freq = obj["grid_frequency"].toDouble();
+            if (std::isfinite(freq) && freq > 0.0) {
+              material->set_grid_frequency_x(freq);
+              material->set_grid_frequency_y(freq);
+            }
+          }
         }
       }
     }

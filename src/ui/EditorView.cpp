@@ -28,9 +28,8 @@ constexpr qreal kRotateStepDeg = 5;  // rotation step per notch when Ctrl held
 constexpr qreal kScaleStep = 1.05;  // item scale step per notch when Shift held
 }  // namespace
 
-EditorView::EditorView(QWidget* parent)
-    : QGraphicsView(parent), scene_(new QGraphicsScene(this)) {
-  setScene(scene_);
+EditorView::EditorView(QWidget* parent) : QGraphicsView(parent) {
+  // Scene will be set by EditorArea
   setRenderHint(QPainter::Antialiasing, true);
   setViewportUpdateMode(QGraphicsView::SmartViewportUpdate);
   setDragMode(QGraphicsView::NoDrag);
@@ -70,15 +69,19 @@ void EditorView::wheelEvent(
 
 #ifdef Q_OS_MACOS
   const bool rotate_mod = (mods & Qt::ControlModifier) != 0;  // Cmd
-  const bool scale_mod = (mods & Qt::AltModifier) != 0;       // Shift
+  const bool scale_mod = (mods & Qt::AltModifier) != 0;       // Alt
 #else
   const bool rotate_mod = (mods & Qt::ControlModifier) != 0;  // Ctrl
-  const bool scale_mod = (mods & Qt::MetaModifier) != 0;      // Shift
+  const bool scale_mod = (mods & Qt::MetaModifier) != 0;      // Meta/Win key
 #endif
 
   // Transform selected items with modifiers (scale first to avoid conflict on
   // macOS)
   if (scale_mod) {
+    if (scene() == nullptr) {
+      event->accept();
+      return;
+    }
     const qreal step = (num_steps > 0) ? std::pow(kScaleStep, num_steps)
                                        : std::pow(1.0 / kScaleStep, -num_steps);
     QList<QGraphicsItem*> targets = scene()->selectedItems();
@@ -107,6 +110,10 @@ void EditorView::wheelEvent(
   }
 
   if (rotate_mod) {
+    if (scene() == nullptr) {
+      event->accept();
+      return;
+    }
     const qreal delta =
       (num_steps > 0 ? kRotateStepDeg : -kRotateStepDeg) * std::abs(num_steps);
     QList<QGraphicsItem*> targets = scene()->selectedItems();
@@ -163,8 +170,12 @@ void EditorView::mouseMoveEvent(QMouseEvent* event) {
   if (panning_) {
     const QPoint delta = event->pos() - last_mouse_pos_;
     last_mouse_pos_ = event->pos();
-    horizontalScrollBar()->setValue(horizontalScrollBar()->value() - delta.x());
-    verticalScrollBar()->setValue(verticalScrollBar()->value() - delta.y());
+    if (auto* h_scroll = horizontalScrollBar()) {
+      h_scroll->setValue(h_scroll->value() - delta.x());
+    }
+    if (auto* v_scroll = verticalScrollBar()) {
+      v_scroll->setValue(v_scroll->value() - delta.y());
+    }
     event->accept();
     return;
   }

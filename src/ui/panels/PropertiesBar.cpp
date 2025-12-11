@@ -261,13 +261,16 @@ void PropertiesBar::set_selected_item(ISceneObject* item, const QString& name) {
     material_combo_->setVisible(true);
     material_color_btn_->setVisible(true);
     material_color_btn_->setEnabled(can_edit_material_color());
-    // Show grid controls if custom material
-    if (current_model_ &&
-        current_model_->material_mode() == ShapeModel::MaterialMode::Custom) {
+    // Show grid controls based on material mode
+    if (current_model_ && current_model_->material() != nullptr) {
       grid_type_label_->setVisible(true);
       grid_type_combo_->setVisible(true);
-      // Set current_material_shared_ to custom material for grid controls
+      // Set current_material_shared_ to material for grid controls
       current_material_shared_ = current_model_->material();
+      // Enable/disable based on material mode
+      const bool is_custom =
+        current_model_->material_mode() == ShapeModel::MaterialMode::Custom;
+      update_grid_controls_enabled(is_custom);
       update_grid_controls();  // This will set visibility of frequency spins
                                // based on grid type
     } else {
@@ -280,6 +283,24 @@ void PropertiesBar::set_selected_item(ISceneObject* item, const QString& name) {
     if (current_model_ && current_model_->material()) {
       current_item_->set_material_model(current_model_->material().get());
     }
+  } else {
+    // For non-inclusion items (like substrate), hide and remove grid controls
+    if (grid_type_label_->parent() == this) {
+      layout_->removeWidget(grid_type_label_);
+    }
+    if (grid_type_combo_->parent() == this) {
+      layout_->removeWidget(grid_type_combo_);
+    }
+    if (grid_frequency_x_spin_->parent() == this) {
+      layout_->removeWidget(grid_frequency_x_spin_);
+    }
+    if (grid_frequency_y_spin_->parent() == this) {
+      layout_->removeWidget(grid_frequency_y_spin_);
+    }
+    grid_type_label_->setVisible(false);
+    grid_type_combo_->setVisible(false);
+    grid_frequency_x_spin_->setVisible(false);
+    grid_frequency_y_spin_->setVisible(false);
   }
 
   updating_ = false;
@@ -358,6 +379,40 @@ void PropertiesBar::connect_model_signals() {
           if (!updating_) {
             update_name(name);
           }
+        } else if (change.type == ModelChange::Type::MaterialChanged &&
+                   current_model_ && !updating_) {
+          // Update material UI when material changes
+          updating_ = true;
+          if (current_model_->material_mode() ==
+              ShapeModel::MaterialMode::Preset) {
+            item_material_ = current_model_->material().get();
+            current_material_shared_ = current_model_->material();
+            // Show grid controls for preset material, but make them read-only
+            if (grid_type_label_->parent() == this &&
+                grid_type_combo_->parent() == this) {
+              grid_type_label_->setVisible(true);
+              grid_type_combo_->setVisible(true);
+              update_grid_controls_enabled(false);
+              update_grid_controls();
+            }
+          } else {
+            item_material_ = nullptr;
+            current_material_shared_ = current_model_->material();
+            // Show grid controls for custom material, make them editable
+            if (grid_type_label_->parent() == this &&
+                grid_type_combo_->parent() == this) {
+              grid_type_label_->setVisible(true);
+              grid_type_combo_->setVisible(true);
+              update_grid_controls_enabled(true);
+              update_grid_controls();
+            }
+          }
+          update_material_ui();
+          if (current_item_ != nullptr &&
+              current_model_->material() != nullptr) {
+            current_item_->set_material_model(current_model_->material().get());
+          }
+          updating_ = false;
         }
       });
   }
@@ -433,20 +488,24 @@ void PropertiesBar::setup_material_selector() {
           if (shared) {
             current_model_->assign_material(shared);
             current_material_shared_ = shared;
-            // Hide grid controls for preset
-            grid_type_label_->setVisible(false);
-            grid_type_combo_->setVisible(false);
-            grid_frequency_x_spin_->setVisible(false);
-            grid_frequency_y_spin_->setVisible(false);
+            // Show grid controls for preset material, but make them read-only
+            if (grid_type_label_->parent() == this &&
+                grid_type_combo_->parent() == this) {
+              grid_type_label_->setVisible(true);
+              grid_type_combo_->setVisible(true);
+              update_grid_controls_enabled(false);
+              update_grid_controls();
+            }
           }
         } else {
           current_model_->clear_material();
           current_material_shared_ = current_model_->material();
-          // Show grid controls for custom
+          // Show grid controls for custom material, make them editable
           if (grid_type_combo_->parent() == this &&
               grid_frequency_x_spin_->parent() == this) {
             grid_type_label_->setVisible(true);
             grid_type_combo_->setVisible(true);
+            update_grid_controls_enabled(true);
             update_grid_controls();  // This will set visibility of
                                      // frequency_spin based on grid type
           }
@@ -599,25 +658,49 @@ void PropertiesBar::setup_grid_controls() {
     }
   };
 
-  connect(grid_frequency_x_spin_,
-          QOverload<double>::of(&QDoubleSpinBox::valueChanged), this,
-          [this, update_grid](double value) {
-            if (updating_ || current_material_shared_ == nullptr) {
-              return;
-            }
-            current_material_shared_->set_grid_frequency_x(value);
-            update_grid();
-          });
+  connect(
+    grid_frequency_x_spin_,
+    QOverload<double>::of(&QDoubleSpinBox::valueChanged), this,
+    [this, update_grid](double value) {
+      if (updating_ || current_material_shared_ == nullptr) {
+        return;
+      }
+      // For custom materials, ensure we're modifying the same material as in
+      // the shape model
+      if (current_model_ != nullptr &&
+          current_model_->material_mode() == ShapeModel::MaterialMode::Custom &&
+          current_model_->material() != nullptr) {
+        // Use the material from the shape model to ensure changes are saved
+        current_model_->material()->set_grid_frequency_x(value);
+        // Update current_material_shared_ to keep it in sync
+        current_material_shared_ = current_model_->material();
+      } else {
+        current_material_shared_->set_grid_frequency_x(value);
+      }
+      update_grid();
+    });
 
-  connect(grid_frequency_y_spin_,
-          QOverload<double>::of(&QDoubleSpinBox::valueChanged), this,
-          [this, update_grid](double value) {
-            if (updating_ || current_material_shared_ == nullptr) {
-              return;
-            }
-            current_material_shared_->set_grid_frequency_y(value);
-            update_grid();
-          });
+  connect(
+    grid_frequency_y_spin_,
+    QOverload<double>::of(&QDoubleSpinBox::valueChanged), this,
+    [this, update_grid](double value) {
+      if (updating_ || current_material_shared_ == nullptr) {
+        return;
+      }
+      // For custom materials, ensure we're modifying the same material as in
+      // the shape model
+      if (current_model_ != nullptr &&
+          current_model_->material_mode() == ShapeModel::MaterialMode::Custom &&
+          current_model_->material() != nullptr) {
+        // Use the material from the shape model to ensure changes are saved
+        current_model_->material()->set_grid_frequency_y(value);
+        // Update current_material_shared_ to keep it in sync
+        current_material_shared_ = current_model_->material();
+      } else {
+        current_material_shared_->set_grid_frequency_y(value);
+      }
+      update_grid();
+    });
 }
 
 void PropertiesBar::update_grid_controls() {
@@ -625,6 +708,9 @@ void PropertiesBar::update_grid_controls() {
     return;
   }
   updating_ = true;
+
+  // Save current enabled state to preserve it
+  const bool was_enabled = grid_type_combo_->isEnabled();
 
   // Set grid type
   const MaterialModel::GridType grid_type =
@@ -663,7 +749,16 @@ void PropertiesBar::update_grid_controls() {
     }
   }
 
+  // Restore enabled state
+  update_grid_controls_enabled(was_enabled);
+
   updating_ = false;
+}
+
+void PropertiesBar::update_grid_controls_enabled(bool enabled) {
+  grid_type_combo_->setEnabled(enabled);
+  grid_frequency_x_spin_->setEnabled(enabled);
+  grid_frequency_y_spin_->setEnabled(enabled);
 }
 
 void PropertiesBar::set_model(ObjectTreeModel* model) {
@@ -742,6 +837,9 @@ void PropertiesBar::set_selected_material(MaterialModel* material) {
   layout_->insertWidget(insert_index++, grid_frequency_y_spin_);
   grid_type_label_->setVisible(true);
   grid_type_combo_->setVisible(true);
+  // When editing material directly (not through object), grid controls should
+  // be editable
+  update_grid_controls_enabled(true);
 
   update_material_color_button();
   update_grid_controls();  // This will set visibility of frequency_spin based

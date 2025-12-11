@@ -12,7 +12,12 @@
 #include <algorithm>
 #include <memory>
 
+#include "commands/CommandManager.h"
+#include "commands/MaterialCommands.h"
+#include "commands/ShapeCommands.h"
+#include "model/DocumentModel.h"
 #include "model/ObjectTreeModel.h"
+#include "model/ShapeModel.h"
 #include "scene/ISceneObject.h"
 #include "scene/items/CircleItem.h"
 #include "ui/bindings/ShapeModelBinder.h"
@@ -81,6 +86,14 @@ void ObjectsBar::set_shape_binder(ShapeModelBinder* binder) {
   shape_binder_ = binder;
 }
 
+void ObjectsBar::set_command_manager(CommandManager* command_manager) {
+  command_manager_ = command_manager;
+}
+
+void ObjectsBar::set_document_model(DocumentModel* document_model) {
+  document_model_ = document_model;
+}
+
 void ObjectsBar::add_item_or_preset() {
   if (tree_view_->model() == nullptr) {
     return;
@@ -128,39 +141,86 @@ void ObjectsBar::add_item_or_preset() {
 
     // If context is Inclusions, add a circle (default shape)
     if (is_inclusions_context) {
-      if (editor_area_ == nullptr) {
+      if (editor_area_ == nullptr || document_model_ == nullptr ||
+          shape_binder_ == nullptr) {
         return;
       }
-      auto* scene = editor_area_->scene();
-      if (scene == nullptr) {
-        return;
-      }
-      constexpr double kDefaultNewCircleRadius = 40.0;
-      const QPointF center = editor_area_->substrate_center();
-      auto* circle = new CircleItem(kDefaultNewCircleRadius);
-      scene->addItem(circle);
-      circle->setPos(center);
-      std::shared_ptr<ShapeModel> shape_model;
-      if (shape_binder_ != nullptr) {
-        shape_model = shape_binder_->bind_shape(circle);
-      }
-      // Select the new item
-      if (shape_model) {
-        const QModelIndex item_idx = model->index_from_shape(shape_model);
-        if (item_idx.isValid()) {
-          tree_view_->selectionModel()->setCurrentIndex(
-            item_idx, QItemSelectionModel::ClearAndSelect);
-          tree_view_->edit(item_idx);  // Start editing name
+      // Use command to create shape
+      if (command_manager_ != nullptr) {
+        auto cmd = std::make_unique<CreateShapeCommand>(
+          document_model_, shape_binder_, editor_area_,
+          ShapeModel::ShapeType::Circle);
+        if (command_manager_->execute(std::move(cmd))) {
+          // Find and select the newly created shape
+          const auto& shapes = document_model_->shapes();
+          if (!shapes.empty()) {
+            const auto& new_shape = shapes.back();
+            const QModelIndex item_idx = model->index_from_shape(new_shape);
+            if (item_idx.isValid()) {
+              tree_view_->selectionModel()->setCurrentIndex(
+                item_idx, QItemSelectionModel::ClearAndSelect);
+              tree_view_->edit(item_idx);  // Start editing name
+            }
+          }
+        }
+      } else {
+        // Fallback to old method if command manager not available
+        auto* scene = editor_area_->scene();
+        if (scene == nullptr) {
+          return;
+        }
+        constexpr double kDefaultNewCircleRadius = 40.0;
+        const QPointF center = editor_area_->substrate_center();
+        auto* circle = new CircleItem(kDefaultNewCircleRadius);
+        scene->addItem(circle);
+        circle->setPos(center);
+        std::shared_ptr<ShapeModel> shape_model;
+        if (shape_binder_ != nullptr) {
+          shape_model = shape_binder_->bind_shape(circle);
+        }
+        // Select the new item
+        if (shape_model) {
+          const QModelIndex item_idx = model->index_from_shape(shape_model);
+          if (item_idx.isValid()) {
+            tree_view_->selectionModel()->setCurrentIndex(
+              item_idx, QItemSelectionModel::ClearAndSelect);
+            tree_view_->edit(item_idx);  // Start editing name
+          }
         }
       }
     } else if (is_materials_context) {
-      auto material = model->create_material(QStringLiteral("New Material"));
-      tree_view_->expand(materials_idx);
-      const QModelIndex material_idx = model->index_from_material(material);
-      if (material_idx.isValid()) {
-        tree_view_->selectionModel()->setCurrentIndex(
-          material_idx, QItemSelectionModel::ClearAndSelect);
-        tree_view_->edit(material_idx);
+      if (document_model_ == nullptr) {
+        return;
+      }
+      // Use command to create material
+      if (command_manager_ != nullptr) {
+        auto cmd = std::make_unique<CreateMaterialCommand>(
+          document_model_, Color{}, "New Material");
+        if (command_manager_->execute(std::move(cmd))) {
+          // Find and select the newly created material
+          const auto& materials = document_model_->materials();
+          if (!materials.empty()) {
+            const auto& new_material = materials.back();
+            tree_view_->expand(materials_idx);
+            const QModelIndex material_idx =
+              model->index_from_material(new_material);
+            if (material_idx.isValid()) {
+              tree_view_->selectionModel()->setCurrentIndex(
+                material_idx, QItemSelectionModel::ClearAndSelect);
+              tree_view_->edit(material_idx);
+            }
+          }
+        }
+      } else {
+        // Fallback to old method
+        auto material = model->create_material(QStringLiteral("New Material"));
+        tree_view_->expand(materials_idx);
+        const QModelIndex material_idx = model->index_from_material(material);
+        if (material_idx.isValid()) {
+          tree_view_->selectionModel()->setCurrentIndex(
+            material_idx, QItemSelectionModel::ClearAndSelect);
+          tree_view_->edit(material_idx);
+        }
       }
     }
   }
@@ -187,21 +247,42 @@ void ObjectsBar::remove_selected_item() {
     // Check if it's a material preset
     auto material = model->material_from_index(current);
     if (material != nullptr) {
-      model->remove_material(material);
+      if (command_manager_ != nullptr && document_model_ != nullptr) {
+        // Use command to delete material
+        auto cmd =
+          std::make_unique<DeleteMaterialCommand>(document_model_, material);
+        command_manager_->execute(std::move(cmd));
+      } else {
+        // Fallback to old method
+        model->remove_material(material);
+      }
       return;
     }
 
     // Otherwise it's an inclusion item
     auto shape = model->shape_from_index(current);
     if (shape != nullptr) {
-      if (shape_binder_ != nullptr) {
+      if (command_manager_ != nullptr && document_model_ != nullptr &&
+          shape_binder_ != nullptr && editor_area_ != nullptr) {
+        // Use command to delete shape
+        auto cmd = std::make_unique<DeleteShapeCommand>(
+          document_model_, shape_binder_, editor_area_, shape);
+        command_manager_->execute(std::move(cmd));
+      } else if (shape_binder_ != nullptr) {
+        // Fallback to old method
         if (auto* item = shape_binder_->item_for(shape)) {
-          shape_binder_->unbind_shape(dynamic_cast<ISceneObject*>(item));
+          // Convert to ISceneObject and unbind
+          // unbind_shape will safely handle invalid items (including those not
+          // in scene)
+          auto* scene_obj = dynamic_cast<ISceneObject*>(item);
+          if (scene_obj != nullptr) {
+            shape_binder_->unbind_shape(scene_obj);
+          }
         }
-      }
-      const QModelIndex parent = current.parent();
-      if (parent.isValid()) {
-        model->removeRow(current.row(), parent);
+        const QModelIndex parent = current.parent();
+        if (parent.isValid()) {
+          model->removeRow(current.row(), parent);
+        }
       }
     }
   }

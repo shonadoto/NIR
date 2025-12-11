@@ -73,12 +73,13 @@ void ShapeModel::set_size(const Size2D& size) {
 
 void ShapeModel::set_rotation_deg(double rotation) {
   // Normalize rotation to [0, 360) range
+  constexpr double kDegreesInCircle = 360.0;
   double normalized = rotation;
   while (normalized < 0.0) {
-    normalized += 360.0;
+    normalized += kDegreesInCircle;
   }
-  while (normalized >= 360.0) {
-    normalized -= 360.0;
+  while (normalized >= kDegreesInCircle) {
+    normalized -= kDegreesInCircle;
   }
   if (normalized == rotation_deg_) {
     return;

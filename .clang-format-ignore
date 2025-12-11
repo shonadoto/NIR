@@ -1,0 +1,6 @@
+# Files to ignore for clang-format
+build/
+*.pb.h
+*.pb.cc
+*_autogen/
+

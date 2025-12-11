@@ -17,8 +17,10 @@ class PropertiesBar;
 class ObjectTreeModel;
 class ISceneObject;
 class QGraphicsItem;
+class DocumentController;
 class DocumentModel;
 class ShapeModelBinder;
+class CommandManager;
 
 class MainWindow : public QMainWindow {
   Q_OBJECT
@@ -34,29 +36,15 @@ class MainWindow : public QMainWindow {
   void save_project();
   void save_project_as();
   void open_project();
-  void rebuild_scene_from_document();
-  void sync_document_from_scene();
-  static ISceneObject* create_item_for_shape(
-    const std::shared_ptr<ShapeModel>& shape);
-
-  // Shape type change handling
-  void change_shape_type(ISceneObject* old_item, const QString& new_type);
-  static ShapeModel::ShapeType string_to_shape_type(const QString& type);
-  static auto convert_shape_size(ShapeModel::ShapeType from,
-                                 ShapeModel::ShapeType target_type,
-                                 const Size2D& size) -> Size2D;
-  void replace_shape_item(ISceneObject* old_item,
-                          const std::shared_ptr<ShapeModel>& model,
-                          const QPointF& center_position, qreal rotation,
-                          const QString& name);
 
  private:
   SideBarWidget* side_bar_widget_{nullptr};
   EditorArea* editor_area_{nullptr};
   PropertiesBar* properties_bar_{nullptr};
   ObjectTreeModel* tree_model_{nullptr};
-  QString current_file_path_;
   QGraphicsItem* current_selected_item_{nullptr};
   std::unique_ptr<DocumentModel> document_model_;
   std::unique_ptr<ShapeModelBinder> shape_binder_;
+  std::unique_ptr<DocumentController> document_controller_;
+  std::unique_ptr<CommandManager> command_manager_;
 };

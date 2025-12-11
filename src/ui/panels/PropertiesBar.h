@@ -45,6 +45,7 @@ class PropertiesBar : public QWidget {
   void update_material_ui();
   void update_material_color_button();
   void update_grid_controls();
+  void update_grid_controls_enabled(bool enabled);
   bool can_edit_material_color() const;
 
   QVBoxLayout* layout_{nullptr};

@@ -3,6 +3,7 @@
 #include <QIcon>
 #include <QVariant>
 #include <QtGlobal>
+#include <vector>
 
 #include "model/DocumentModel.h"
 #include "model/MaterialModel.h"
@@ -248,17 +249,21 @@ QVariant ObjectTreeModel::headerData(int section, Qt::Orientation orientation,
     Q_UNUSED(section);
     return QString();  // no visible header text
   }
-  return QVariant();
+  return {};
 }
 
 std::shared_ptr<ShapeModel> ObjectTreeModel::shape_from_index(
   const QModelIndex& index) const {
-  if (!index.isValid()) {
+  if (!index.isValid() || document_ == nullptr) {
     return {};
   }
   TreeNode* node = node_from_index(index);
   if (node != nullptr && node->type == TreeNode::InclusionItem) {
-    return document_ != nullptr ? document_->shapes().at(index.row()) : nullptr;
+    const auto& shapes = document_->shapes();
+    const int row = index.row();
+    if (row >= 0 && row < static_cast<int>(shapes.size())) {
+      return shapes[row];
+    }
   }
   return {};
 }
@@ -401,13 +406,27 @@ bool ObjectTreeModel::removeRows(int row, int count,
     if (row < 0 || row + count > static_cast<int>(shapes.size())) {
       return false;
     }
-    for (int row_index = 0; row_index < count; ++row_index) {
-      auto shape = shapes[row];
-      document_->remove_shape(shape);
+    // Collect shapes to remove before deletion (to avoid index issues)
+    std::vector<std::shared_ptr<ShapeModel>> shapes_to_remove;
+    shapes_to_remove.reserve(count);
+    for (int i = 0; i < count; ++i) {
+      const int current_row = row + i;
+      if (current_row >= 0 && current_row < static_cast<int>(shapes.size())) {
+        shapes_to_remove.push_back(shapes[current_row]);
+      }
+    }
+    if (shapes_to_remove.empty()) {
+      return false;
+    }
+    // Remove from end to avoid index shifting issues
+    beginRemoveRows(parent, row, row + count - 1);
+    for (int i = static_cast<int>(shapes_to_remove.size()) - 1; i >= 0; --i) {
+      document_->remove_shape(shapes_to_remove[i]);
       // delete nullptr is safe in C++
-      auto* node = shape_nodes_.take(shape.get());
+      auto* node = shape_nodes_.take(shapes_to_remove[i].get());
       delete node;
     }
+    endRemoveRows();
     return true;
   }
 
@@ -416,15 +435,29 @@ bool ObjectTreeModel::removeRows(int row, int count,
     if (row < 0 || row + count > static_cast<int>(materials.size())) {
       return false;
     }
-    for (int row_index = 0; row_index < count; ++row_index) {
-      auto material = materials[row];
-      document_->remove_material(material);
+    // Collect materials to remove before deletion (to avoid index issues)
+    std::vector<std::shared_ptr<MaterialModel>> materials_to_remove;
+    materials_to_remove.reserve(count);
+    for (int i = 0; i < count; ++i) {
+      const int current_row = row + i;
+      if (current_row >= 0 &&
+          current_row < static_cast<int>(materials.size())) {
+        materials_to_remove.push_back(materials[current_row]);
+      }
+    }
+    if (materials_to_remove.empty()) {
+      return false;
+    }
+    // Remove from end to avoid index shifting issues
+    beginRemoveRows(parent, row, row + count - 1);
+    for (int i = static_cast<int>(materials_to_remove.size()) - 1; i >= 0;
+         --i) {
+      document_->remove_material(materials_to_remove[i]);
       // delete nullptr is safe in C++
-      auto* node = material_nodes_.take(material.get());
+      auto* node = material_nodes_.take(materials_to_remove[i].get());
       delete node;
     }
-    beginResetModel();
-    endResetModel();
+    endRemoveRows();
     return true;
   }
 

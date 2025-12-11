@@ -8,6 +8,7 @@ set(SOURCES
     ui/panels/PropertiesBar.cpp
     ui/editor/EditorArea.cpp
     ui/bindings/ShapeModelBinder.cpp
+    ui/controller/DocumentController.cpp
     ui/editor/SubstrateItem.cpp
     ui/editor/SubstrateDialog.cpp
     ui/sidebar/SideBarWidget.cpp
@@ -23,6 +24,9 @@ set(SOURCES
     scene/items/CircleItem.cpp
     scene/items/StickItem.cpp
     serialization/ProjectSerializer.cpp
+    commands/CommandManager.cpp
+    commands/ShapeCommands.cpp
+    commands/MaterialCommands.cpp
     )
 
 set(HEADERS
@@ -34,6 +38,7 @@ set(HEADERS
     ui/panels/PropertiesBar.h
     ui/editor/EditorArea.h
     ui/bindings/ShapeModelBinder.h
+    ui/controller/DocumentController.h
     ui/utils/ColorUtils.h
     ui/editor/SubstrateItem.h
     ui/editor/SubstrateDialog.h
@@ -48,12 +53,17 @@ set(HEADERS
     model/ShapeSizeConverter.h
     model/SubstrateModel.h
     scene/ISceneObject.h
+    scene/items/BaseShapeItem.h
     scene/items/RectangleItem.h
     scene/items/EllipseItem.h
     scene/items/CircleItem.h
     scene/items/StickItem.h
     serialization/ProjectSerializer.h
     utils/Logging.h
+    commands/Command.h
+    commands/CommandManager.h
+    commands/ShapeCommands.h
+    commands/MaterialCommands.h
     )
 
 add_executable(NIRMaterialEditor
@@ -77,8 +87,9 @@ find_program(CLANG_TIDY_EXE
 if(CLANG_TIDY_EXE)
     message(STATUS "clang-tidy found: ${CLANG_TIDY_EXE}")
     # Configure clang-tidy to treat warnings as errors and fail build on issues
+    # Use -p flag to point to compile_commands.json for better accuracy
     set_target_properties(NIRMaterialEditor PROPERTIES
-        CXX_CLANG_TIDY "${CLANG_TIDY_EXE};-config-file=${CMAKE_SOURCE_DIR}/.clang-tidy;-warnings-as-errors=*"
+        CXX_CLANG_TIDY "${CLANG_TIDY_EXE};-config-file=${CMAKE_SOURCE_DIR}/.clang-tidy;-p=${CMAKE_BINARY_DIR};-warnings-as-errors=*"
     )
     message(STATUS "clang-tidy enabled: will run during compilation and fail on errors")
     

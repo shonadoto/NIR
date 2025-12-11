@@ -33,8 +33,9 @@ auto SubstrateItem::boundingRect() const -> QRectF {
   return {QPointF(0, 0), size_};
 }
 
-void SubstrateItem::paint(QPainter* painter, const QStyleOptionGraphicsItem*,
-                          QWidget*) {
+void SubstrateItem::paint(QPainter* painter,
+                          const QStyleOptionGraphicsItem* /*option*/,
+                          QWidget* /*widget*/) {
   painter->setRenderHint(QPainter::Antialiasing, true);
   const QRectF rect = boundingRect().adjusted(
     kOutlineWidthPx, kOutlineWidthPx, -kOutlineWidthPx, -kOutlineWidthPx);
@@ -116,14 +117,16 @@ void SubstrateItem::from_json(const QJsonObject& json) {
   if (json.contains("fill_color")) {
     QJsonArray color_array = json["fill_color"].toArray();
     if (color_array.size() >= 4) {
-      const int r = color_array[0].toInt();
-      const int g = color_array[1].toInt();
-      const int b = color_array[2].toInt();
-      const int a = color_array[3].toInt();
+      constexpr int kMaxColorValue = 255;
+      const int red = color_array[0].toInt();
+      const int green = color_array[1].toInt();
+      const int blue = color_array[2].toInt();
+      const int alpha = color_array[3].toInt();
       // Validate color values are in valid range [0, 255]
-      if (r >= 0 && r <= 255 && g >= 0 && g <= 255 && b >= 0 && b <= 255 &&
-          a >= 0 && a <= 255) {
-        set_fill_color(QColor(r, g, b, a));
+      if (red >= 0 && red <= kMaxColorValue && green >= 0 &&
+          green <= kMaxColorValue && blue >= 0 && blue <= kMaxColorValue &&
+          alpha >= 0 && alpha <= kMaxColorValue) {
+        set_fill_color(QColor(red, green, blue, alpha));
       }
     }
   }

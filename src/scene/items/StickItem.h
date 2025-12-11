@@ -1,11 +1,11 @@
 #pragma once
 
 #include <QGraphicsLineItem>
-#include <functional>
 
 #include "scene/ISceneObject.h"
+#include "scene/items/BaseShapeItem.h"
 
-class StickItem : public QGraphicsLineItem, public ISceneObject {
+class StickItem : public BaseShapeItem<QGraphicsLineItem> {
  public:
   explicit StickItem(const QLineF& line, QGraphicsItem* parent = nullptr);
   ~StickItem() override = default;
@@ -16,13 +16,9 @@ class StickItem : public QGraphicsLineItem, public ISceneObject {
   QString type_name() const override {
     return QStringLiteral("stick");
   }
-  QString name() const override {
-    return name_;
-  }
-  void set_name(const QString& name) override;
-  void set_geometry_changed_callback(std::function<void()> callback) override;
-  void clear_geometry_changed_callback() override;
-  void set_material_model(class MaterialModel* material) override;
+  // name(), set_name(), set_geometry_changed_callback(),
+  // clear_geometry_changed_callback(), set_material_model() inherited from
+  // BaseShapeItem
 
  protected:
   QRectF boundingRect() const override;
@@ -30,10 +26,4 @@ class StickItem : public QGraphicsLineItem, public ISceneObject {
              QWidget* widget) override;
   QVariant itemChange(GraphicsItemChange change,
                       const QVariant& value) override;
-
- private:
-  QString name_{"Stick"};
-  std::function<void()> geometry_changed_callback_;
-
-  void notify_geometry_changed() const;
 };

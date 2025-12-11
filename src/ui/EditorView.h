@@ -22,7 +22,6 @@ class EditorView : public QGraphicsView {
   void applyZoom(qreal factor);
 
  private:
-  QGraphicsScene* scene_{nullptr};
   bool panning_{false};
   QPoint last_mouse_pos_;
   qreal scale_{1.0};

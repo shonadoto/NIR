@@ -26,9 +26,3 @@ compile_commands.json
 *.tmp
 format.sh
 lint.sh
-LINTING.md
-LOGGING.md
-.clang-format
-.clang-format-ignore
-.clang-tidy
-CODE_REVIEW_PLAN.md

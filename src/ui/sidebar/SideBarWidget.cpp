@@ -42,7 +42,7 @@ void SideBarWidget::registerSidebar(const QString& sidebar_id,
     btn, &QToolButton::toggled, this,
     [this, entry_id = entry.id](bool /*on*/) { setActive(entry_id); });
   entry.button = btn;
-  id_to_entry_.insert(sidebar_id, std::move(entry));
+  id_to_entry_.insert(sidebar_id, entry);
 
   // Ensure initial width accounts for new button's sizeHint
   applyWidth();

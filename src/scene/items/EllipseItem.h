@@ -1,11 +1,11 @@
 #pragma once
 
 #include <QGraphicsEllipseItem>
-#include <functional>
 
 #include "scene/ISceneObject.h"
+#include "scene/items/BaseShapeItem.h"
 
-class EllipseItem : public QGraphicsEllipseItem, public ISceneObject {
+class EllipseItem : public BaseShapeItem<QGraphicsEllipseItem> {
  public:
   explicit EllipseItem(const QRectF& rect, QGraphicsItem* parent = nullptr);
   ~EllipseItem() override = default;
@@ -16,13 +16,9 @@ class EllipseItem : public QGraphicsEllipseItem, public ISceneObject {
   QString type_name() const override {
     return QStringLiteral("ellipse");
   }
-  QString name() const override {
-    return name_;
-  }
-  void set_name(const QString& name) override;
-  void set_geometry_changed_callback(std::function<void()> callback) override;
-  void clear_geometry_changed_callback() override;
-  void set_material_model(class MaterialModel* material) override;
+  // name(), set_name(), set_geometry_changed_callback(),
+  // clear_geometry_changed_callback(), set_material_model() inherited from
+  // BaseShapeItem
 
  protected:
   QRectF boundingRect() const override;
@@ -32,11 +28,6 @@ class EllipseItem : public QGraphicsEllipseItem, public ISceneObject {
                       const QVariant& value) override;
 
  private:
-  QString name_{"Ellipse"};
-  std::function<void()> geometry_changed_callback_;
-  class MaterialModel* material_model_{nullptr};
-
-  void notify_geometry_changed() const;
   void draw_radial_grid(QPainter* painter, const QRectF& extendedRect,
                         const QRectF& baseRect) const;
 };

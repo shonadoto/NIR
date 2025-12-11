@@ -28,6 +28,7 @@ class ShapeModelBinder {
     -> QGraphicsItem*;
   void unbind_shape(ISceneObject* item);
   void clear_bindings();
+  void cleanup_invalid_bindings();
 
  private:
   struct Binding {

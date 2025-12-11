@@ -9,6 +9,8 @@ class QToolBar;
 class ObjectTreeModel;
 class EditorArea;
 class ShapeModelBinder;
+class CommandManager;
+class DocumentModel;
 
 class ObjectsBar : public QWidget {
   Q_OBJECT
@@ -26,6 +28,8 @@ class ObjectsBar : public QWidget {
   void set_model(QAbstractItemModel* model);
   void set_editor_area(EditorArea* editor_area);
   void set_shape_binder(ShapeModelBinder* binder);
+  void set_command_manager(CommandManager* command_manager);
+  void set_document_model(DocumentModel* document_model);
 
  private slots:
   void add_item_or_preset();
@@ -53,6 +57,8 @@ class ObjectsBar : public QWidget {
   int preferred_width_;
   int last_visible_width_;
   ShapeModelBinder* shape_binder_{nullptr};
+  CommandManager* command_manager_{nullptr};
+  DocumentModel* document_model_{nullptr};
 
  protected:
   void hideEvent(QHideEvent* event) override;

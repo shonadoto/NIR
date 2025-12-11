@@ -28,6 +28,7 @@
 #include <Qt>
 #include <memory>
 
+#include "commands/CommandManager.h"
 #include "model/DocumentModel.h"
 #include "model/MaterialModel.h"
 #include "model/ObjectTreeModel.h"
@@ -42,6 +43,7 @@
 #include "scene/items/StickItem.h"
 #include "serialization/ProjectSerializer.h"
 #include "ui/bindings/ShapeModelBinder.h"
+#include "ui/controller/DocumentController.h"
 #include "ui/editor/EditorArea.h"
 #include "ui/editor/SubstrateDialog.h"
 #include "ui/editor/SubstrateItem.h"
@@ -68,10 +70,26 @@ MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent) {
   setWindowTitle("NIR Material Editor");
   setWindowIcon(QIcon(":/icons/app.svg"));
 
+  // Create document model and binder
   document_model_ = std::make_unique<DocumentModel>();
   shape_binder_ = std::make_unique<ShapeModelBinder>(*document_model_);
 
+  // Create command manager
+  command_manager_ = std::make_unique<CommandManager>(this);
+
+  // Create controller
+  document_controller_ = std::make_unique<DocumentController>(this);
+  document_controller_->set_document_model(document_model_.get());
+  document_controller_->set_shape_binder(shape_binder_.get());
+  document_controller_->set_command_manager(command_manager_.get());
+
   createActivityObjectsBarAndEditor();
+
+  // Set editor area in controller after it's created
+  if (editor_area_ != nullptr) {
+    document_controller_->set_editor_area(editor_area_);
+  }
+
   createMenuBar();
   createActionsAndToolbar();
 
@@ -133,6 +151,49 @@ void MainWindow::createActionsAndToolbar() {
   // namespace
   toolbar->setContextMenuPolicy(Qt::PreventContextMenu);
 
+  // Undo/Redo actions
+  auto* undo_action = new QAction("Undo", this);
+  undo_action->setShortcut(QKeySequence::Undo);
+  undo_action->setEnabled(false);
+  connect(undo_action, &QAction::triggered, this, [this] {
+    if (command_manager_ != nullptr) {
+      command_manager_->undo();
+    }
+  });
+  connect(
+    command_manager_.get(), &CommandManager::history_changed, this,
+    [this, undo_action] {
+      if (command_manager_ != nullptr) {
+        undo_action->setEnabled(command_manager_->can_undo());
+        const auto desc = command_manager_->undo_description();
+        undo_action->setToolTip(
+          desc.empty() ? "Undo" : ("Undo: " + QString::fromStdString(desc)));
+      }
+    });
+  toolbar->addAction(undo_action);
+
+  auto* redo_action = new QAction("Redo", this);
+  redo_action->setShortcut(QKeySequence::Redo);
+  redo_action->setEnabled(false);
+  connect(redo_action, &QAction::triggered, this, [this] {
+    if (command_manager_ != nullptr) {
+      command_manager_->redo();
+    }
+  });
+  connect(
+    command_manager_.get(), &CommandManager::history_changed, this,
+    [this, redo_action] {
+      if (command_manager_ != nullptr) {
+        redo_action->setEnabled(command_manager_->can_redo());
+        const auto desc = command_manager_->redo_description();
+        redo_action->setToolTip(
+          desc.empty() ? "Redo" : ("Redo: " + QString::fromStdString(desc)));
+      }
+    });
+  toolbar->addAction(redo_action);
+
+  toolbar->addSeparator();
+
   auto* fit_action = new QAction("Fit to View", this);
   connect(fit_action, &QAction::triggered, this, [this] {
     if (editor_area_ != nullptr) {
@@ -169,6 +230,8 @@ void MainWindow::createActivityObjectsBarAndEditor() {
   // Register default Objects bar
   auto* objects_bar = new ObjectsBar(side_bar_widget_);
   objects_bar->set_shape_binder(shape_binder_.get());
+  objects_bar->set_command_manager(command_manager_.get());
+  objects_bar->set_document_model(document_model_.get());
   side_bar_widget_->registerSidebar("objects", QIcon(":/icons/objects.svg"),
                                     objects_bar, kDefaultObjectsBarWidthPx);
 
@@ -208,19 +271,25 @@ void MainWindow::createActivityObjectsBarAndEditor() {
   // Connect PropertiesBar name change to model update
   connect(properties_bar_, &PropertiesBar::name_changed, this,
           [this](const QString& new_name) {
-            if (tree_model_ == nullptr || current_selected_item_ == nullptr) {
+            if (tree_model_ == nullptr || current_selected_item_ == nullptr ||
+                shape_binder_ == nullptr) {
               return;
             }
-            if (shape_binder_ != nullptr && current_selected_item_ != nullptr) {
-              auto model = shape_binder_->model_for(
-                dynamic_cast<ISceneObject*>(current_selected_item_));
-              if (model != nullptr) {
-                // above
-                const QModelIndex idx = tree_model_->index_from_shape(model);
-                if (idx.isValid()) {
-                  // namespace
-                  tree_model_->setData(idx, new_name, Qt::EditRole);
-                }
+            // Validate current_selected_item_ is still valid
+            if (current_selected_item_->scene() == nullptr) {
+              current_selected_item_ = nullptr;
+              return;
+            }
+            auto* scene_obj =
+              dynamic_cast<ISceneObject*>(current_selected_item_);
+            if (scene_obj == nullptr) {
+              return;
+            }
+            auto model = shape_binder_->model_for(scene_obj);
+            if (model != nullptr) {
+              const QModelIndex idx = tree_model_->index_from_shape(model);
+              if (idx.isValid()) {
+                tree_model_->setData(idx, new_name, Qt::EditRole);
               }
             }
           });
@@ -250,7 +319,18 @@ void MainWindow::createActivityObjectsBarAndEditor() {
 
   // Connect PropertiesBar type change to replace object
   connect(properties_bar_, &PropertiesBar::type_changed, this,
-          &MainWindow::change_shape_type);
+          [this](ISceneObject* item, const QString& new_type) {
+            if (document_controller_ == nullptr || item == nullptr) {
+              return;
+            }
+            // Validate item is still valid
+            if (auto* graphics_item = dynamic_cast<QGraphicsItem*>(item)) {
+              if (graphics_item->scene() == nullptr) {
+                return;
+              }
+            }
+            document_controller_->change_shape_type(item, new_type);
+          });
   // Bind model to the Objects bar (first sidebar entry)
   // We know SideBarWidget registered the "objects" page as index 0
   // so we can safely find the first page's widget and cast to ObjectsBar
@@ -263,10 +343,14 @@ void MainWindow::createActivityObjectsBarAndEditor() {
               auto shape_model = tree_model_->shape_from_index(top_left);
               if (shape_model != nullptr && shape_binder_ != nullptr) {
                 auto* item = shape_binder_->item_for(shape_model);
-                if (item != nullptr && item == current_selected_item_) {
+                // Validate item is still valid and matches current selection
+                if (item != nullptr && item->scene() != nullptr &&
+                    item == current_selected_item_) {
                   const QString name =
                     QString::fromStdString(shape_model->name());
-                  properties_bar_->update_name(name);
+                  if (properties_bar_ != nullptr) {
+                    properties_bar_->update_name(name);
+                  }
                 }
               }
               // Check if it's a material node
@@ -285,13 +369,17 @@ void MainWindow::createActivityObjectsBarAndEditor() {
       // above
       connect(tree_view->selectionModel(), &QItemSelectionModel::currentChanged,
               this, [this](const QModelIndex& current, const QModelIndex&) {
-                if (editor_area_ == nullptr) {
+                if (editor_area_ == nullptr || tree_model_ == nullptr) {
                   return;
                 }
                 auto shape_model = tree_model_->shape_from_index(current);
                 if (shape_model != nullptr && shape_binder_ != nullptr) {
                   auto* item = shape_binder_->item_for(shape_model);
                   if (item != nullptr) {
+                    // Validate item is still in scene
+                    if (item->scene() == nullptr) {
+                      return;
+                    }
                     auto* scene = editor_area_->scene();
                     if (scene == nullptr) {
                       return;
@@ -300,7 +388,8 @@ void MainWindow::createActivityObjectsBarAndEditor() {
                     item->setSelected(true);
                     current_selected_item_ = item;
                     if (properties_bar_ != nullptr) {
-                      if (auto* scene_obj = dynamic_cast<ISceneObject*>(item)) {
+                      auto* scene_obj = dynamic_cast<ISceneObject*>(item);
+                      if (scene_obj != nullptr) {
                         const QString name =
                           QString::fromStdString(shape_model->name());
                         properties_bar_->set_selected_item(scene_obj, name);
@@ -313,6 +402,13 @@ void MainWindow::createActivityObjectsBarAndEditor() {
                 auto material = tree_model_->material_from_index(current);
                 if (material != nullptr && properties_bar_ != nullptr) {
                   current_selected_item_ = nullptr;
+                  // Clear scene selection when selecting material
+                  if (editor_area_ != nullptr) {
+                    auto* scene = editor_area_->scene();
+                    if (scene != nullptr) {
+                      scene->clearSelection();
+                    }
+                  }
                   properties_bar_->set_selected_material(material.get());
                 }
               });
@@ -320,6 +416,9 @@ void MainWindow::createActivityObjectsBarAndEditor() {
       if (auto* scene = editor_area_->scene()) {
         connect(
           scene, &QGraphicsScene::selectionChanged, this, [this, tree_view] {
+            if (editor_area_ == nullptr || tree_model_ == nullptr) {
+              return;
+            }
             auto items = editor_area_->scene()->selectedItems();
             if (items.isEmpty()) {
               // Show substrate when nothing selected
@@ -330,21 +429,28 @@ void MainWindow::createActivityObjectsBarAndEditor() {
               }
               return;
             }
+            // Validate first item is still valid
+            auto* first_item = items.first();
+            if (first_item == nullptr || first_item->scene() == nullptr) {
+              return;
+            }
             if (shape_binder_ != nullptr) {
-              if (auto model = shape_binder_->model_for(
-                    dynamic_cast<ISceneObject*>(items.first()))) {
-                const QModelIndex idx = tree_model_->index_from_shape(model);
-                if (idx.isValid()) {
-                  tree_view->selectionModel()->setCurrentIndex(
-                    idx, QItemSelectionModel::ClearAndSelect);
+              auto* scene_obj = dynamic_cast<ISceneObject*>(first_item);
+              if (scene_obj != nullptr) {
+                if (auto model = shape_binder_->model_for(scene_obj)) {
+                  const QModelIndex idx = tree_model_->index_from_shape(model);
+                  if (idx.isValid() && tree_view->selectionModel() != nullptr) {
+                    tree_view->selectionModel()->setCurrentIndex(
+                      idx, QItemSelectionModel::ClearAndSelect);
+                  }
                 }
               }
             }
             // Update properties bar
             if (properties_bar_ != nullptr) {
-              if (auto* scene_obj =
-                    dynamic_cast<ISceneObject*>(items.first())) {
-                current_selected_item_ = items.first();
+              auto* scene_obj = dynamic_cast<ISceneObject*>(first_item);
+              if (scene_obj != nullptr) {
+                current_selected_item_ = first_item;
                 const QString name = scene_obj->name();
                 properties_bar_->set_selected_item(scene_obj, name);
               }
@@ -368,40 +474,19 @@ void MainWindow::createActivityObjectsBarAndEditor() {
 }
 
 void MainWindow::new_project() {
-  // Clear all objects except substrate
-  if (editor_area_ == nullptr) {
-    return;
-  }
-  auto* scene = editor_area_->scene();
-  if (scene == nullptr) {
-    return;
-  }
-
   // Clear properties bar FIRST before deleting items
   if (properties_bar_ != nullptr) {
     properties_bar_->clear();
   }
   current_selected_item_ = nullptr;
 
-  if (document_model_ != nullptr) {
-    document_model_->clear_shapes();
-    document_model_->clear_materials();
-    auto substrate = std::make_shared<SubstrateModel>(
-      Size2D{kDefaultSubstrateWidthPx, kDefaultSubstrateHeightPx},
-      Color{kDefaultSubstrateColorR, kDefaultSubstrateColorG,
-            kDefaultSubstrateColorB, kDefaultSubstrateColorA});
-    substrate->set_name("Substrate");
-    document_model_->set_substrate(substrate);
+  if (document_controller_ != nullptr) {
+    document_controller_->new_document();
   }
 
-  rebuild_scene_from_document();
-
-  // Clear current file and selection
-  current_file_path_.clear();
-  current_selected_item_ = nullptr;
-
   // Show substrate in properties
-  if (properties_bar_ != nullptr && editor_area_->substrate_item() != nullptr) {
+  if (properties_bar_ != nullptr && editor_area_ != nullptr &&
+      editor_area_->substrate_item() != nullptr) {
     properties_bar_->set_selected_item(editor_area_->substrate_item(),
                                        "Substrate");
   }
@@ -410,14 +495,17 @@ void MainWindow::new_project() {
 }
 
 void MainWindow::save_project() {
-  if (current_file_path_.isEmpty()) {
+  if (document_controller_ == nullptr) {
+    return;
+  }
+
+  const QString file_path = document_controller_->current_file_path();
+  if (file_path.isEmpty()) {
     save_project_as();
     return;
   }
 
-  sync_document_from_scene();
-  if (ProjectSerializer::save_to_file(current_file_path_,
-                                      document_model_.get())) {
+  if (document_controller_->save_document(file_path)) {
     statusBar()->showMessage("Project saved successfully",
                              kStatusBarMessageTimeoutMs);
   } else {
@@ -427,6 +515,10 @@ void MainWindow::save_project() {
 }
 
 void MainWindow::save_project_as() {
+  if (document_controller_ == nullptr) {
+    return;
+  }
+
   QSettings settings("NIR", "MaterialEditor");
   const QString last_dir =
     settings.value("lastDirectory", QDir::homePath()).toString();
@@ -439,9 +531,7 @@ void MainWindow::save_project_as() {
     return;
   }
 
-  sync_document_from_scene();
-  if (ProjectSerializer::save_to_file(filename, document_model_.get())) {
-    current_file_path_ = filename;
+  if (document_controller_->save_document(filename)) {
     settings.setValue("lastDirectory", QFileInfo(filename).absolutePath());
     statusBar()->showMessage("Project saved successfully",
                              kStatusBarMessageTimeoutMs);
@@ -452,6 +542,10 @@ void MainWindow::save_project_as() {
 }
 
 void MainWindow::open_project() {
+  if (document_controller_ == nullptr) {
+    return;
+  }
+
   QSettings settings("NIR", "MaterialEditor");
   const QString last_dir =
     settings.value("lastDirectory", QDir::homePath()).toString();
@@ -469,282 +563,18 @@ void MainWindow::open_project() {
   }
   current_selected_item_ = nullptr;
 
-  if (ProjectSerializer::load_from_file(filename, document_model_.get())) {
-    rebuild_scene_from_document();
-    current_file_path_ = filename;
+  if (document_controller_->load_document(filename)) {
     settings.setValue("lastDirectory", QFileInfo(filename).absolutePath());
     statusBar()->showMessage("Project loaded successfully",
                              kStatusBarMessageTimeoutMs);
+    // Show substrate in properties by default after loading
+    if (properties_bar_ != nullptr && editor_area_ != nullptr &&
+        editor_area_->substrate_item() != nullptr) {
+      properties_bar_->set_selected_item(editor_area_->substrate_item(),
+                                         "Substrate");
+    }
   } else {
     statusBar()->showMessage("Failed to load project",
                              kStatusBarMessageTimeoutMs);
-  }
-}
-
-void MainWindow::sync_document_from_scene() {
-  if (document_model_ == nullptr || editor_area_ == nullptr) {
-    return;
-  }
-  auto substrate = document_model_->substrate();
-  if (!substrate) {
-    substrate = std::make_shared<SubstrateModel>();
-    document_model_->set_substrate(substrate);
-  }
-  if (auto* substrate_item = editor_area_->substrate_item()) {
-    const QSizeF size = substrate_item->size();
-    substrate->set_size(Size2D{size.width(), size.height()});
-    substrate->set_color(to_model_color(substrate_item->fill_color()));
-    substrate->set_name(substrate_item->name().toStdString());
-  }
-}
-
-auto MainWindow::create_item_for_shape(const std::shared_ptr<ShapeModel>& shape)
-  -> ISceneObject* {
-  if (shape == nullptr) {
-    return nullptr;
-  }
-  const Size2D size = shape->size();
-  switch (shape->type()) {
-    case ShapeModel::ShapeType::Rectangle: {
-      auto* item = new RectangleItem(QRectF(0, 0, size.width, size.height));
-      item->set_name(QString::fromStdString(shape->name()));
-      return item;
-    }
-    case ShapeModel::ShapeType::Ellipse: {
-      auto* item = new EllipseItem(QRectF(0, 0, size.width, size.height));
-      item->set_name(QString::fromStdString(shape->name()));
-      return item;
-    }
-    case ShapeModel::ShapeType::Circle: {
-      const qreal radius = static_cast<qreal>(size.width) / 2.0;
-      auto* item = new CircleItem(radius > 0 ? radius : kDefaultCircleRadius);
-      item->set_name(QString::fromStdString(shape->name()));
-      return item;
-    }
-    case ShapeModel::ShapeType::Stick: {
-      const qreal half_len = static_cast<qreal>(size.width) / 2.0;
-      auto* item = new StickItem(QLineF(-half_len, 0.0, half_len, 0.0));
-      QPen pen = item->pen();
-      pen.setWidthF(ShapeConstants::kStickThickness);
-      item->setPen(pen);
-      item->set_name(QString::fromStdString(shape->name()));
-      return item;
-    }
-  }
-  return nullptr;
-}
-
-void MainWindow::rebuild_scene_from_document() {
-  if (document_model_ == nullptr || editor_area_ == nullptr ||
-      shape_binder_ == nullptr) {
-    return;
-  }
-  auto* scene = editor_area_->scene();
-  if (scene == nullptr) {
-    return;
-  }
-
-  if (properties_bar_ != nullptr) {
-    properties_bar_->clear();
-  }
-  current_selected_item_ = nullptr;
-
-  shape_binder_->clear_bindings();
-
-  QList<QGraphicsItem*> to_remove;
-  for (QGraphicsItem* item : scene->items()) {
-    if (dynamic_cast<SubstrateItem*>(item) == nullptr) {
-      to_remove.append(item);
-    }
-  }
-  for (QGraphicsItem* item : to_remove) {
-    scene->removeItem(item);
-    delete item;
-  }
-
-  if (auto substrate_model = document_model_->substrate()) {
-    if (auto* substrate_item = editor_area_->substrate_item()) {
-      substrate_item->set_size(
-        QSizeF(substrate_model->size().width, substrate_model->size().height));
-      substrate_item->set_fill_color(to_qcolor(substrate_model->color()));
-      substrate_item->set_name(QString::fromStdString(substrate_model->name()));
-    }
-  }
-
-  for (const auto& shape : document_model_->shapes()) {
-    if (!shape) {
-      continue;
-    }
-    if (auto* scene_obj = MainWindow::create_item_for_shape(shape)) {
-      if (auto* graphics_item = dynamic_cast<QGraphicsItem*>(scene_obj)) {
-        scene_obj->set_name(QString::fromStdString(shape->name()));
-        graphics_item->setPos(shape->position().x, shape->position().y);
-        graphics_item->setRotation(shape->rotation_deg());
-        scene->addItem(graphics_item);
-        shape_binder_->attach_shape(scene_obj, shape);
-      } else {
-        delete scene_obj;
-      }
-    }
-  }
-
-  tree_model_->set_substrate(editor_area_->substrate_item());
-}
-
-auto MainWindow::string_to_shape_type(const QString& type)
-  -> ShapeModel::ShapeType {
-  if (type == "circle") {
-    return ShapeModel::ShapeType::Circle;
-  }
-  if (type == "ellipse") {
-    return ShapeModel::ShapeType::Ellipse;
-  }
-  if (type == "stick") {
-    return ShapeModel::ShapeType::Stick;
-  }
-  return ShapeModel::ShapeType::Rectangle;
-}
-
-auto MainWindow::convert_shape_size(ShapeModel::ShapeType from,
-                                    ShapeModel::ShapeType target_type,
-                                    const Size2D& size) -> Size2D {
-  return ShapeSizeConverter::convert(from, target_type, size);
-}
-
-void MainWindow::change_shape_type(ISceneObject* old_item,
-                                   const QString& new_type) {
-  if (old_item == nullptr || editor_area_ == nullptr ||
-      tree_model_ == nullptr) {
-    return;
-  }
-
-  auto* old_graphics_item = dynamic_cast<QGraphicsItem*>(old_item);
-  if (old_graphics_item == nullptr) {
-    return;
-  }
-
-  auto* scene = editor_area_->scene();
-  if (scene == nullptr) {
-    return;
-  }
-
-  std::shared_ptr<ShapeModel> shape_model;
-  if (shape_binder_ != nullptr) {
-    shape_model = shape_binder_->model_for(old_item);
-  }
-  if (shape_model == nullptr) {
-    return;
-  }
-
-  const ShapeModel::ShapeType target_type =
-    MainWindow::string_to_shape_type(new_type);
-  if (shape_model->type() == target_type) {
-    return;
-  }
-
-  // Get current properties before changing type
-  // Calculate center of old item in scene coordinates using sceneBoundingRect
-  // for accuracy
-  const QPointF old_center = old_graphics_item->sceneBoundingRect().center();
-
-  const qreal rotation = old_graphics_item->rotation();
-  const QString item_name = old_item->name();
-  const Size2D current_model_size = shape_model->size();
-  const ShapeModel::ShapeType current_type = shape_model->type();
-
-  // Convert size and ensure minimum
-  Size2D new_size = MainWindow::convert_shape_size(current_type, target_type,
-                                                   current_model_size);
-  new_size = ShapeSizeConverter::ensure_minimum(new_size, target_type);
-
-  // Update model
-  shape_model->set_type(target_type);
-  shape_model->set_size(new_size);
-
-  // Replace the item in the scene, preserving center position
-  replace_shape_item(old_item, shape_model, old_center, rotation, item_name);
-}
-
-void MainWindow::replace_shape_item(ISceneObject* old_item,
-                                    const std::shared_ptr<ShapeModel>& model,
-                                    const QPointF& center_position,
-                                    qreal rotation, const QString& name) {
-  if (old_item == nullptr || editor_area_ == nullptr || model == nullptr) {
-    return;
-  }
-
-  auto* old_graphics_item = dynamic_cast<QGraphicsItem*>(old_item);
-  if (old_graphics_item == nullptr) {
-    return;
-  }
-
-  auto* scene = editor_area_->scene();
-  if (scene == nullptr) {
-    return;
-  }
-
-  // Create new item (not yet added to scene)
-  std::unique_ptr<ISceneObject> new_item_ptr(
-    MainWindow::create_item_for_shape(model));
-  if (new_item_ptr == nullptr) {
-    return;  // Failed to create item
-  }
-
-  auto* new_item = new_item_ptr.release();
-  auto* new_graphics_item = dynamic_cast<QGraphicsItem*>(new_item);
-  if (new_graphics_item == nullptr) {
-    delete new_item;
-    return;
-  }
-
-  // Calculate position for new item so its center matches the old center
-  // We need to add item to scene temporarily to get accurate boundingRect
-  // (some items may need scene context for proper boundingRect calculation)
-  scene->addItem(new_graphics_item);
-  const QRectF new_bounding_rect = new_graphics_item->boundingRect();
-  scene->removeItem(new_graphics_item);
-
-  // Validate boundingRect
-  if (new_bounding_rect.isEmpty() || !new_bounding_rect.isValid()) {
-    delete new_item;
-    return;  // Invalid bounding rect
-  }
-
-  // Calculate position: center in scene = pos() + boundingRect().center()
-  // So: pos() = center - boundingRect().center()
-  const QPointF new_position = center_position - new_bounding_rect.center();
-
-  // Unbind old item first, before removing it
-  if (shape_binder_ != nullptr) {
-    shape_binder_->unbind_shape(old_item);
-  }
-
-  // Remove old item from scene before adding new one
-  scene->removeItem(old_graphics_item);
-  delete old_graphics_item;
-
-  // Set up new item with calculated position to preserve center
-  new_item->set_name(name);
-  new_graphics_item->setPos(new_position);
-  new_graphics_item->setRotation(rotation);
-  scene->addItem(new_graphics_item);
-
-  // Update model position before binding to avoid apply_geometry overwriting it
-  if (shape_binder_ != nullptr) {
-    // Convert QPointF to model Point2D (using same conversion as
-    // ShapeModelBinder)
-    model->set_position(Point2D{new_position.x(), new_position.y()});
-    model->set_rotation_deg(rotation);
-
-    // Now bind - apply_geometry will use the correct position from model
-    shape_binder_->attach_shape(new_item, model);
-    // Force update to ensure correct rendering
-    new_graphics_item->update();
-  }
-
-  // Update UI
-  current_selected_item_ = new_graphics_item;
-  if (properties_bar_ != nullptr) {
-    properties_bar_->set_selected_item(new_item, name);
   }
 }

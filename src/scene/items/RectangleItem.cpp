@@ -31,21 +31,15 @@ constexpr double kGridPenWidth = 0.5;
 }  // namespace
 
 RectangleItem::RectangleItem(const QRectF& rect, QGraphicsItem* parent)
-    : QGraphicsRectItem(rect, parent) {
+    : BaseShapeItem<QGraphicsRectItem>(rect, parent) {
   setFlags(QGraphicsItem::ItemIsSelectable | QGraphicsItem::ItemIsMovable |
            QGraphicsItem::ItemSendsGeometryChanges);
   setPen(QPen(Qt::black, 1.0));
   setBrush(QBrush(
     QColor(kDefaultColorR, kDefaultColorG, kDefaultColorB, kDefaultColorA)));
   setTransformOriginPoint(boundingRect().center());
-}
-
-void RectangleItem::set_name(const QString& name) {
-  const QString trimmed = name.trimmed();
-  if (trimmed.isEmpty() || trimmed == name_) {
-    return;
-  }
-  name_ = trimmed;
+  // Set default name
+  set_name("Rectangle");
 }
 
 QWidget* RectangleItem::create_properties_widget(QWidget* parent) {
@@ -112,7 +106,7 @@ QWidget* RectangleItem::create_properties_widget(QWidget* parent) {
 QJsonObject RectangleItem::to_json() const {
   QJsonObject obj;
   obj["type"] = type_name();
-  obj["name"] = name_;
+  obj["name"] = name();
   obj["position"] = QJsonArray{pos().x(), pos().y()};
   obj["rotation"] = rotation();
   obj["width"] = rect().width();
@@ -127,16 +121,16 @@ void RectangleItem::from_json(const QJsonObject& json) {
   if (json.contains("name")) {
     const QString name = json["name"].toString();
     if (!name.isEmpty()) {
-      name_ = name;
+      set_name(name);
     }
   }
   if (json.contains("position")) {
     QJsonArray position_array = json["position"].toArray();
     if (position_array.size() >= 2) {
-      const double x = position_array[0].toDouble();
-      const double y = position_array[1].toDouble();
-      if (std::isfinite(x) && std::isfinite(y)) {
-        setPos(x, y);
+      const double pos_x = position_array[0].toDouble();
+      const double pos_y = position_array[1].toDouble();
+      if (std::isfinite(pos_x) && std::isfinite(pos_y)) {
+        setPos(pos_x, pos_y);
       }
     }
   }
@@ -161,38 +155,23 @@ void RectangleItem::from_json(const QJsonObject& json) {
   if (json.contains("fill_color")) {
     QJsonArray color_array = json["fill_color"].toArray();
     if (color_array.size() >= 4) {
-      const int r = color_array[0].toInt();
-      const int g = color_array[1].toInt();
-      const int b = color_array[2].toInt();
-      const int a = color_array[3].toInt();
+      constexpr int kMaxColorValue = 255;
+      const int red = color_array[0].toInt();
+      const int green = color_array[1].toInt();
+      const int blue = color_array[2].toInt();
+      const int alpha = color_array[3].toInt();
       // Validate color values are in valid range [0, 255]
-      if (r >= 0 && r <= 255 && g >= 0 && g <= 255 && b >= 0 && b <= 255 &&
-          a >= 0 && a <= 255) {
-        setBrush(QBrush(QColor(r, g, b, a)));
+      if (red >= 0 && red <= kMaxColorValue && green >= 0 &&
+          green <= kMaxColorValue && blue >= 0 && blue <= kMaxColorValue &&
+          alpha >= 0 && alpha <= kMaxColorValue) {
+        setBrush(QBrush(QColor(red, green, blue, alpha)));
       }
     }
   }
 }
 
-void RectangleItem::set_geometry_changed_callback(
-  std::function<void()> callback) {
-  geometry_changed_callback_ = std::move(callback);
-}
-
-void RectangleItem::clear_geometry_changed_callback() {
-  geometry_changed_callback_ = nullptr;
-}
-
-void RectangleItem::notify_geometry_changed() const {
-  if (geometry_changed_callback_) {
-    geometry_changed_callback_();
-  }
-}
-
-void RectangleItem::set_material_model(MaterialModel* material) {
-  material_model_ = material;
-  update();  // Trigger repaint to show/hide grid
-}
+// set_geometry_changed_callback, clear_geometry_changed_callback,
+// notify_geometry_changed, set_material_model are now in BaseShapeItem
 
 void RectangleItem::paint(QPainter* painter,
                           const QStyleOptionGraphicsItem* option,
@@ -201,15 +180,19 @@ void RectangleItem::paint(QPainter* painter,
   QGraphicsRectItem::paint(painter, option, widget);
 
   // Draw grid if material has Internal grid enabled
-  if (material_model_ != nullptr &&
-      material_model_->grid_type() == MaterialModel::GridType::Internal) {
+  if (material_model() != nullptr &&
+      material_model()->grid_type() == MaterialModel::GridType::Internal) {
     draw_internal_grid(painter, rect());
   }
 }
 
 void RectangleItem::draw_internal_grid(QPainter* painter,
                                        const QRectF& rect) const {
-  // material_model_ is already checked in paint() before calling this
+  // material_model() is already checked in paint() before calling this
+  auto* material = material_model();
+  if (material == nullptr) {
+    return;
+  }
   painter->save();
 
   // Draw only lines, no fill
@@ -218,9 +201,8 @@ void RectangleItem::draw_internal_grid(QPainter* painter,
   grid_pen.setWidthF(kGridPenWidth);
   painter->setPen(grid_pen);
 
-  const double freq_x =
-    material_model_->grid_frequency_x();  // Horizontal cells
-  const double freq_y = material_model_->grid_frequency_y();  // Vertical cells
+  const double freq_x = material->grid_frequency_x();  // Horizontal cells
+  const double freq_y = material->grid_frequency_y();  // Vertical cells
 
   // Calculate spacing for horizontal and vertical lines separately
   const qreal spacing_x = rect.width() / freq_x;
@@ -247,9 +229,6 @@ void RectangleItem::draw_internal_grid(QPainter* painter,
 
 QVariant RectangleItem::itemChange(GraphicsItemChange change,
                                    const QVariant& value) {
-  if (change == ItemPositionHasChanged || change == ItemRotationHasChanged ||
-      change == ItemTransformHasChanged) {
-    notify_geometry_changed();
-  }
+  handle_geometry_change(change);
   return QGraphicsRectItem::itemChange(change, value);
 }

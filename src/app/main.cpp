@@ -13,8 +13,12 @@
 #include <QStandardPaths>
 #include <QString>
 #include <array>
+#include <cerrno>
 #include <csignal>
+#include <cstdio>
 #include <cstdlib>
+#include <exception>
+#include <iostream>
 #include <memory>
 #include <vector>
 
@@ -41,6 +45,7 @@ auto CrashHandler(int sig) -> void {
     case SIGILL:
       signal_name = "SIGILL";
       break;
+    // NOLINTNEXTLINE(misc-include-cleaner) SIGBUS is defined in <csignal>
     case SIGBUS:
       signal_name = "SIGBUS";
       break;
@@ -49,21 +54,42 @@ auto CrashHandler(int sig) -> void {
       break;
   }
 
-  LOG_CRITICAL() << "Received signal: " << signal_name << " (" << sig << ")";
+  // Try to log, but if logging is not initialized, write to stderr
+  try {
+    LOG_CRITICAL() << "Received signal: " << signal_name << " (" << sig << ")";
+  } catch (...) {
+    // Logging not available, write to stderr
+    // NOLINTNEXTLINE(modernize-use-std-print) std::println may not be available
+    std::cerr << "CRITICAL: Received signal: " << signal_name << " (" << sig
+              << ")\n";
+  }
 
   // Print stack trace
   std::array<void*, kMaxStackTraceFrames> array{};
   const size_t size = backtrace(array.data(), kMaxStackTraceFrames);
 
-  LOG_CRITICAL() << "Stack trace (" << size << " frames):";
+  // Try to log stack trace, but if logging is not initialized, write to stderr
+  try {
+    LOG_CRITICAL() << "Stack trace (" << size << " frames):";
+  } catch (...) {
+    // NOLINTNEXTLINE(modernize-use-std-print) std::println may not be available
+    std::cerr << "Stack trace (" << size << " frames):\n";
+  }
   // bugprone-multi-level-implicit-pointer-conversion) backtrace_symbols is a C
   // library function that uses malloc and returns char** The conversion from
   // char** to void* is required by the C API
   char** messages = backtrace_symbols(array.data(), static_cast<int>(size));
   if (messages != nullptr) {
     for (size_t i = 0; i < size; i++) {
-      LOG_CRITICAL() << "  [" << i << "] "
-                     << (messages[i] != nullptr ? messages[i] : "?");
+      try {
+        LOG_CRITICAL() << "  [" << i << "] "
+                       << (messages[i] != nullptr ? messages[i] : "?");
+      } catch (...) {
+        // NOLINTNEXTLINE(modernize-use-std-print) std::println may not be
+        // available
+        std::cerr << "  [" << i << "] "
+                  << (messages[i] != nullptr ? messages[i] : "?") << "\n";
+      }
     }
     free(reinterpret_cast<void*>(
       messages));  // NOLINT(cppcoreguidelines-no-malloc,bugprone-multi-level-implicit-pointer-conversion)
@@ -87,24 +113,39 @@ auto SetupLogging() -> void {
     data_dir = QDir::currentPath();
   }
 
-  const QDir dir(data_dir);
+  QDir dir(data_dir);
   if (!dir.exists()) {
-    dir.mkpath(".");
+    if (!dir.mkpath(".")) {
+      // Failed to create directory, fallback to current directory
+      data_dir = QDir::currentPath();
+      dir = QDir(data_dir);
+    }
   }
 
   const QString log_path = dir.absoluteFilePath(app_name + "_log.txt");
 
-  // Create file sink
-  auto file_sink = std::make_shared<spdlog::sinks::basic_file_sink_mt>(
-    log_path.toStdString(), true);
-  file_sink->set_level(spdlog::level::trace);
+  // Create file sink with error handling
+  std::shared_ptr<spdlog::sinks::basic_file_sink_mt> file_sink;
+  try {
+    file_sink = std::make_shared<spdlog::sinks::basic_file_sink_mt>(
+      log_path.toStdString(), true);
+    file_sink->set_level(spdlog::level::trace);
+  } catch (const std::exception&) {  // NOLINT(bugprone-empty-catch)
+    // Failed to create file sink, continue with console sink only
+    // This is not critical - application can work without file logging
+    // Exception is intentionally ignored to allow graceful degradation
+  }
 
   // Create console sink
   auto console_sink = std::make_shared<spdlog::sinks::stdout_color_sink_mt>();
   console_sink->set_level(spdlog::level::info);
 
-  // Combine sinks
-  std::vector<spdlog::sink_ptr> sinks{file_sink, console_sink};
+  // Combine sinks (only add file_sink if it was created successfully)
+  std::vector<spdlog::sink_ptr> sinks;
+  if (file_sink != nullptr) {
+    sinks.push_back(file_sink);
+  }
+  sinks.push_back(console_sink);
   auto logger =
     std::make_shared<spdlog::logger>("multi_sink", sinks.begin(), sinks.end());
 
@@ -113,8 +154,12 @@ auto SetupLogging() -> void {
   logger->set_pattern("[%Y-%m-%d %H:%M:%S.%e] [%^%l%$] [%s:%#] %v");
 
   spdlog::set_default_logger(logger);
-  const std::string log_path_str = log_path.toStdString();
-  LOG_INFO_FMT("Logging initialized. Log file: {}", log_path_str.c_str());
+  if (file_sink != nullptr) {
+    const std::string log_path_str = log_path.toStdString();
+    LOG_INFO_FMT("Logging initialized. Log file: {}", log_path_str.c_str());
+  } else {
+    LOG_INFO() << "Logging initialized (console only, file logging failed)";
+  }
 }
 
 auto main(int argc, char* argv[]) -> int {
@@ -126,23 +171,34 @@ auto main(int argc, char* argv[]) -> int {
   std::signal(SIGBUS, CrashHandler);
 
   // QApplication cannot be const because exec() modifies internal state
-  QApplication app(argc, argv);
+  // However, we can make it const until exec() is called
+  const QApplication app(argc, argv);
   QApplication::setApplicationName("NIRMaterialEditor");
   QApplication::setWindowIcon(QIcon(":/icons/app.svg"));
 
   SetupLogging();
   LOG_INFO() << "Application starting";
 
-  MainWindow main_window;
-  main_window.show();
+  try {
+    MainWindow main_window;
+    main_window.show();
 
-  LOG_INFO() << "MainWindow shown, entering event loop";
+    LOG_INFO() << "MainWindow shown, entering event loop";
 
-  // app.exec() modifies internal state, so app cannot be const
-  const int result = QApplication::exec();
+    // app.exec() modifies internal state, so app cannot be const
+    const int result = QApplication::exec();
 
-  LOG_INFO() << "Application exiting with code: " << result;
-  spdlog::shutdown();
+    LOG_INFO() << "Application exiting with code: " << result;
+    spdlog::shutdown();
 
-  return result;
+    return result;
+  } catch (const std::exception& e) {
+    LOG_CRITICAL() << "Unhandled exception in main: " << e.what();
+    spdlog::shutdown();
+    return 1;
+  } catch (...) {
+    LOG_CRITICAL() << "Unhandled unknown exception in main";
+    spdlog::shutdown();
+    return 1;
+  }
 }
