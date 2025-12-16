@@ -252,22 +252,22 @@ ModifyShapePropertyCommand::ModifyShapePropertyCommand(
   // Save old value
   if (shape_ != nullptr) {
     switch (property) {
-      case Property::Name:
+      case Property::kName:
         old_value_ = shape_->name();
         break;
-      case Property::Position:
+      case Property::kPosition:
         old_value_ = shape_->position();
         break;
-      case Property::Size:
+      case Property::kSize:
         old_value_ = shape_->size();
         break;
-      case Property::Rotation:
+      case Property::kRotation:
         old_value_ = shape_->rotation_deg();
         break;
-      case Property::Color:
+      case Property::kColor:
         old_value_ = shape_->custom_color();
         break;
-      case Property::Material:
+      case Property::kMaterial:
         old_value_ = shape_->material();
         break;
     }
@@ -280,32 +280,32 @@ auto ModifyShapePropertyCommand::execute() -> bool {
   }
 
   switch (property_) {
-    case Property::Name:
+    case Property::kName:
       if (std::holds_alternative<std::string>(new_value_)) {
         shape_->set_name(std::get<std::string>(new_value_));
       }
       break;
-    case Property::Position:
+    case Property::kPosition:
       if (std::holds_alternative<Point2D>(new_value_)) {
         shape_->set_position(std::get<Point2D>(new_value_));
       }
       break;
-    case Property::Size:
+    case Property::kSize:
       if (std::holds_alternative<Size2D>(new_value_)) {
         shape_->set_size(std::get<Size2D>(new_value_));
       }
       break;
-    case Property::Rotation:
+    case Property::kRotation:
       if (std::holds_alternative<double>(new_value_)) {
         shape_->set_rotation_deg(std::get<double>(new_value_));
       }
       break;
-    case Property::Color:
+    case Property::kColor:
       if (std::holds_alternative<Color>(new_value_)) {
         shape_->set_custom_color(std::get<Color>(new_value_));
       }
       break;
-    case Property::Material:
+    case Property::kMaterial:
       if (std::holds_alternative<std::shared_ptr<MaterialModel>>(new_value_)) {
         auto material = std::get<std::shared_ptr<MaterialModel>>(new_value_);
         if (material != nullptr) {
@@ -326,32 +326,32 @@ auto ModifyShapePropertyCommand::undo() -> bool {
   }
 
   switch (property_) {
-    case Property::Name:
+    case Property::kName:
       if (std::holds_alternative<std::string>(old_value_)) {
         shape_->set_name(std::get<std::string>(old_value_));
       }
       break;
-    case Property::Position:
+    case Property::kPosition:
       if (std::holds_alternative<Point2D>(old_value_)) {
         shape_->set_position(std::get<Point2D>(old_value_));
       }
       break;
-    case Property::Size:
+    case Property::kSize:
       if (std::holds_alternative<Size2D>(old_value_)) {
         shape_->set_size(std::get<Size2D>(old_value_));
       }
       break;
-    case Property::Rotation:
+    case Property::kRotation:
       if (std::holds_alternative<double>(old_value_)) {
         shape_->set_rotation_deg(std::get<double>(old_value_));
       }
       break;
-    case Property::Color:
+    case Property::kColor:
       if (std::holds_alternative<Color>(old_value_)) {
         shape_->set_custom_color(std::get<Color>(old_value_));
       }
       break;
-    case Property::Material:
+    case Property::kMaterial:
       if (std::holds_alternative<std::shared_ptr<MaterialModel>>(old_value_)) {
         auto material = std::get<std::shared_ptr<MaterialModel>>(old_value_);
         if (material != nullptr) {
@@ -368,17 +368,17 @@ auto ModifyShapePropertyCommand::undo() -> bool {
 
 auto ModifyShapePropertyCommand::description() const -> std::string {
   switch (property_) {
-    case Property::Name:
+    case Property::kName:
       return "Rename Shape";
-    case Property::Position:
+    case Property::kPosition:
       return "Move Shape";
-    case Property::Size:
+    case Property::kSize:
       return "Resize Shape";
-    case Property::Rotation:
+    case Property::kRotation:
       return "Rotate Shape";
-    case Property::Color:
+    case Property::kColor:
       return "Change Shape Color";
-    case Property::Material:
+    case Property::kMaterial:
       return "Change Shape Material";
   }
   return "Modify Shape";
@@ -397,7 +397,7 @@ auto ModifyShapePropertyCommand::merge_with(const Command& other) -> bool {
   }
 
   // Only merge certain properties (e.g., position, rotation for dragging)
-  if (property_ == Property::Position || property_ == Property::Rotation) {
+  if (property_ == Property::kPosition || property_ == Property::kRotation) {
     // Update new_value_ to other's new_value_ (we're merging forward)
     new_value_ = other_cmd->new_value_;
     return true;
@@ -438,7 +438,7 @@ auto ChangeShapeTypeCommand::execute() -> bool {
 
   // Get current properties
   const auto old_size = shape_->size();
-  const auto old_position = shape_->position();
+  // const auto old_position = shape_->position();
   const auto old_rotation = shape_->rotation_deg();
   const auto old_name = shape_->name();
 
@@ -479,7 +479,7 @@ auto ChangeShapeTypeCommand::undo() -> bool {
 
   // Get current properties
   const auto current_size = shape_->size();
-  const auto current_position = shape_->position();
+  // const auto current_position = shape_->position();
   const auto current_rotation = shape_->rotation_deg();
   const auto current_name = shape_->name();
 

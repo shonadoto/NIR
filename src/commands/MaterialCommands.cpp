@@ -25,7 +25,7 @@ auto CreateMaterialCommand::execute() -> bool {
   // Find index in document
   const auto& materials = document_->materials();
   const auto material_it =
-    std::find(materials.begin(), materials.end(), created_material_);
+    std::ranges::find(materials, created_material_);
   if (material_it != materials.end()) {
     material_index_ =
       static_cast<int>(std::distance(materials.begin(), material_it));
@@ -56,7 +56,7 @@ DeleteMaterialCommand::DeleteMaterialCommand(
   if (document_ != nullptr && material_ != nullptr) {
     const auto& materials = document_->materials();
     const auto material_it =
-      std::find(materials.begin(), materials.end(), material_);
+      std::ranges::find(materials, material_);
     if (material_it != materials.end()) {
       material_index_ =
         static_cast<int>(std::distance(materials.begin(), material_it));
@@ -112,19 +112,19 @@ ModifyMaterialPropertyCommand::ModifyMaterialPropertyCommand(
   if (material_ != nullptr) {
     // NOLINTNEXTLINE(bugprone-branch-clone) - each case calls different method
     switch (property) {
-      case Property::Name:
+      case Property::kName:
         old_value_ = material_->name();
         break;
-      case Property::Color:
+      case Property::kColor:
         old_value_ = material_->color();
         break;
-      case Property::GridType:
+      case Property::kGridType:
         old_value_ = material_->grid_type();
         break;
-      case Property::GridFrequencyX:
+      case Property::kGridFrequencyX:
         old_value_ = material_->grid_frequency_x();
         break;
-      case Property::GridFrequencyY:
+      case Property::kGridFrequencyY:
         old_value_ = material_->grid_frequency_y();
         break;
     }
@@ -137,27 +137,27 @@ auto ModifyMaterialPropertyCommand::execute() -> bool {
   }
 
   switch (property_) {
-    case Property::Name:
+    case Property::kName:
       if (std::holds_alternative<std::string>(new_value_)) {
         material_->set_name(std::get<std::string>(new_value_));
       }
       break;
-    case Property::Color:
+    case Property::kColor:
       if (std::holds_alternative<Color>(new_value_)) {
         material_->set_color(std::get<Color>(new_value_));
       }
       break;
-    case Property::GridType:
+    case Property::kGridType:
       if (std::holds_alternative<MaterialModel::GridType>(new_value_)) {
         material_->set_grid_type(std::get<MaterialModel::GridType>(new_value_));
       }
       break;
-    case Property::GridFrequencyX:
+    case Property::kGridFrequencyX:
       if (std::holds_alternative<double>(new_value_)) {
         material_->set_grid_frequency_x(std::get<double>(new_value_));
       }
       break;
-    case Property::GridFrequencyY:
+    case Property::kGridFrequencyY:
       if (std::holds_alternative<double>(new_value_)) {
         material_->set_grid_frequency_y(std::get<double>(new_value_));
       }
@@ -175,27 +175,27 @@ auto ModifyMaterialPropertyCommand::undo() -> bool {
   // NOLINTNEXTLINE(bugprone-branch-clone) - each case handles different
   // property type
   switch (property_) {
-    case Property::Name:
+    case Property::kName:
       if (std::holds_alternative<std::string>(old_value_)) {
         material_->set_name(std::get<std::string>(old_value_));
       }
       break;
-    case Property::Color:
+    case Property::kColor:
       if (std::holds_alternative<Color>(old_value_)) {
         material_->set_color(std::get<Color>(old_value_));
       }
       break;
-    case Property::GridType:
+    case Property::kGridType:
       if (std::holds_alternative<MaterialModel::GridType>(old_value_)) {
         material_->set_grid_type(std::get<MaterialModel::GridType>(old_value_));
       }
       break;
-    case Property::GridFrequencyX:
+    case Property::kGridFrequencyX:
       if (std::holds_alternative<double>(old_value_)) {
         material_->set_grid_frequency_x(std::get<double>(old_value_));
       }
       break;
-    case Property::GridFrequencyY:
+    case Property::kGridFrequencyY:
       if (std::holds_alternative<double>(old_value_)) {
         material_->set_grid_frequency_y(std::get<double>(old_value_));
       }
@@ -207,15 +207,15 @@ auto ModifyMaterialPropertyCommand::undo() -> bool {
 
 auto ModifyMaterialPropertyCommand::description() const -> std::string {
   switch (property_) {
-    case Property::Name:
+    case Property::kName:
       return "Rename Material";
-    case Property::Color:
+    case Property::kColor:
       return "Change Material Color";
-    case Property::GridType:
+    case Property::kGridType:
       return "Change Material Grid Type";
-    case Property::GridFrequencyX:
+    case Property::kGridFrequencyX:
       return "Change Material Grid Frequency X";
-    case Property::GridFrequencyY:
+    case Property::kGridFrequencyY:
       return "Change Material Grid Frequency Y";
   }
   return "Modify Material";

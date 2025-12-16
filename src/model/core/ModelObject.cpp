@@ -33,7 +33,7 @@ void ModelObject::set_name(const std::string& name) {
     return;
   }
   name_ = trimmed;
-  notify_change(ModelChange{ModelChange::Type::NameChanged, "name"});
+  notify_change(ModelChange{.type=ModelChange::Type::NameChanged, .property="name"});
 }
 
 void ModelObject::notify_change(const ModelChange& change) const {

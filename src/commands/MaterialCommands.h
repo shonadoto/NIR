@@ -2,6 +2,7 @@
 
 #include <memory>
 #include <string>
+#include <variant>
 
 #include "commands/Command.h"
 #include "model/MaterialModel.h"
@@ -14,14 +15,14 @@ class DocumentModel;
  */
 class CreateMaterialCommand : public Command {
  public:
-  CreateMaterialCommand(DocumentModel* document, Color color = {},
+  explicit CreateMaterialCommand(DocumentModel* document, Color color = {},
                         std::string name = {});
 
   auto execute() -> bool override;
   auto undo() -> bool override;
   [[nodiscard]] auto description() const -> std::string override;
 
-  std::shared_ptr<MaterialModel> created_material() const {
+  [[nodiscard]] std::shared_ptr<MaterialModel> created_material() const {
     return created_material_;
   }
 
@@ -56,7 +57,7 @@ class DeleteMaterialCommand : public Command {
  */
 class ModifyMaterialPropertyCommand : public Command {
  public:
-  enum class Property { Name, Color, GridType, GridFrequencyX, GridFrequencyY };
+  enum class Property : std::uint8_t { kName, kColor, kGridType, kGridFrequencyX, kGridFrequencyY };
 
   ModifyMaterialPropertyCommand(
     std::shared_ptr<MaterialModel> material, Property property,

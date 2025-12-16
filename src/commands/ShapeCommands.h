@@ -2,6 +2,7 @@
 
 #include <memory>
 #include <string>
+#include <variant>
 
 #include "commands/Command.h"
 #include "model/ShapeModel.h"
@@ -68,7 +69,7 @@ class DeleteShapeCommand : public Command {
  */
 class ModifyShapePropertyCommand : public Command {
  public:
-  enum class Property { Name, Position, Size, Rotation, Color, Material };
+  enum class Property : std::uint8_t { kName, kPosition, kSize, kRotation, kColor, kMaterial };
 
   ModifyShapePropertyCommand(
     const std::shared_ptr<ShapeModel>& shape, Property property,

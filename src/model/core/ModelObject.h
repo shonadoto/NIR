@@ -35,6 +35,6 @@ class ModelObject {
   static auto GenerateId() -> std::string;
 
   std::string id_;
-  std::string name_{"Unnamed"};
+  std::string name_{"New inclusion"};
   mutable ChangeSignal changed_signal_;
 };
